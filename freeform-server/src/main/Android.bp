@@ -29,5 +29,10 @@ java_library_static {
         "java/com/libremobileos/**/*.java",
         "java/com/libremobileos/**/*.kt",
         ":lmofreeform_aidl",
-    ]
+    ],
+    aidl: {
+        include_dirs: [
+            "frameworks/native/aidl/gui",
+        ],
+    },
 }

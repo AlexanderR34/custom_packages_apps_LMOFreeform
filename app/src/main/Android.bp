@@ -20,6 +20,11 @@ android_app {
         "java/**/*.kt",
         ":lmofreeform_aidl",
     ],
+    aidl: {
+        include_dirs: [
+            "frameworks/native/aidl/gui",
+        ],
+    },
     resource_dirs: ["res"],
     certificate: "platform",
     platform_apis: true,
