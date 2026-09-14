@@ -4,6 +4,10 @@
     package="com.libremobileos.freeform"
     android:sharedUserId="android.uid.system">
 
+    <permission
+        android:name="com.crdroid.permission.START_FREEFORM"
+        android:protectionLevel="signature|privileged" />
+
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
