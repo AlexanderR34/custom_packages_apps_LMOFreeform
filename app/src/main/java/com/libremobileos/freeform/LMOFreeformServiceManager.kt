@@ -15,53 +15,84 @@ object LMOFreeformServiceManager {
     fun init() {
         try {
             val r = ServiceManager.getService("lmo_freeform")
-            iLMOFreeformService = ILMOFreeformUIService.Stub.asInterface(r)
-            iLMOFreeformService?.ping()
+            if (r != null) {
+                iLMOFreeformService = ILMOFreeformUIService.Stub.asInterface(r)
+                iLMOFreeformService?.ping()
+                Log.d(TAG, "Initialized LMOFreeformServiceManager successfully")
+            } else {
+                Log.w(TAG, "ServiceManager.getService(lmo_freeform) returned null")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "$e")
-            e.printStackTrace()
+            Log.e(TAG, "init failed: $e", e)
         }
+    }
+
+    private fun getService(): ILMOFreeformUIService? {
+        if (iLMOFreeformService == null || !(iLMOFreeformService?.asBinder()?.isBinderAlive ?: false)) {
+            init()
+        }
+        return iLMOFreeformService
     }
 
     fun ping(): Boolean {
         return try {
-            iLMOFreeformService!!.ping()
-            true
+            getService()?.ping() == true
         } catch (e: Exception) {
-            Log.e(TAG, "$e")
-            e.printStackTrace()
+            Log.e(TAG, "ping failed: $e", e)
             false
         }
     }
 
     fun createWindow(packageName: String, activityName: String, userId: Int, taskId: Int,
             width: Int, height: Int, densityDpi: Int) {
-        iLMOFreeformService?.startAppInFreeform(
-            packageName,
-            activityName,
-            userId,
-            taskId,
-            null,
-            width,
-            height,
-            densityDpi
-        )
+        val service = getService()
+        if (service == null) {
+            Log.e(TAG, "createWindow failed: lmo_freeform service is null")
+            return
+        }
+        try {
+            service.startAppInFreeform(
+                packageName,
+                activityName,
+                userId,
+                taskId,
+                null,
+                width,
+                height,
+                densityDpi
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "createWindow exception: $e", e)
+        }
     }
 
     fun createWindow(pendingIntent: PendingIntent?, width: Int, height: Int, densityDpi: Int) {
-        iLMOFreeformService?.startAppInFreeform(
-            pendingIntent?.creatorPackage?:"pendingIntentCreatorPackage",
-            "unknownActivity-${Date().time}",
-            -100,
-            -1,
-            pendingIntent,
-            width,
-            height,
-            densityDpi
-        )
+        val service = getService()
+        if (service == null) {
+            Log.e(TAG, "createWindow (pendingIntent) failed: lmo_freeform service is null")
+            return
+        }
+        try {
+            service.startAppInFreeform(
+                pendingIntent?.creatorPackage ?: "pendingIntentCreatorPackage",
+                "unknownActivity-${Date().time}",
+                -100,
+                -1,
+                pendingIntent,
+                width,
+                height,
+                densityDpi
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "createWindow exception: $e", e)
+        }
     }
 
     fun removeFreeform(freeformId: String) {
-        iLMOFreeformService?.removeFreeform(freeformId)
+        try {
+            getService()?.removeFreeform(freeformId)
+        } catch (e: Exception) {
+            Log.e(TAG, "removeFreeform exception: $e", e)
+        }
     }
 }
