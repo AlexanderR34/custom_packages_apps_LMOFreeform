@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Barra lateral</string>
+
+    <!--SettingsFragment-->
+    <string name="enable_sideline">Usar barra lateral</string>
+    <string name="sidebar_label">Barra lateral</string>
+    <string name="sidebar_summary">Abre apps rápidamente en ventanas flotantes libres</string>
+    <string name="sidebar_app_setting_label">Apps fijadas</string>
+    <string name="sidebar_settings_description">Abrir ajustes de barra lateral</string>
+    <string name="sidebar_predicted_apps">Sugerencias de apps</string>
+    <string name="sidebar_predicted_apps_summary">Mostrar hasta 6 apps sugeridas debajo de las apps fijadas</string>
+</resources>
