@@ -18,6 +18,7 @@ android_app {
     name: "LMOFreeform",
     srcs: [
         "java/**/*.kt",
+        ":lmofreeform_aidl",
     ],
     resource_dirs: ["res"],
     certificate: "platform",
