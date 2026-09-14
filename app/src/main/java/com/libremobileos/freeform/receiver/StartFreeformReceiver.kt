@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.graphics.Point
 import android.graphics.Rect
 import android.provider.Settings
+import android.util.Log
 import android.view.Display
 
 import com.libremobileos.freeform.LMOFreeform
