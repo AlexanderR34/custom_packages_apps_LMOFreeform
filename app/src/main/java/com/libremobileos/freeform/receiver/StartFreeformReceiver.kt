@@ -56,30 +56,30 @@ class StartFreeformReceiver : BroadcastReceiver() {
 
     private fun launchAppInLMOFreeform(context: Context, intent: Intent) {
         if (Debug.isDebug) logger.d("onReceive ${intent.extras}")
-        val packageName = intent.getStringExtra("packageName")
+        val packageName = intent.getStringExtra("packageName") ?: return
         val activityName = intent.getStringExtra("activityName")
+            ?: context.packageManager.getLaunchIntentForPackage(packageName)?.component?.className
+            ?: return
         val userId = intent.getIntExtra("userId", 0)
         val taskId = intent.getIntExtra("taskId", -1)
 
-        if (packageName != null && activityName != null) {
-            val sp = context.getSharedPreferences(LMOFreeform.CONFIG, Context.MODE_PRIVATE)
-            val screenWidth = context.resources.displayMetrics.widthPixels
-            val screenHeight = context.resources.displayMetrics.heightPixels
-            val screenDensityDpi = context.resources.displayMetrics.densityDpi
-            val freeformWidth = sp.getInt("freeform_width", (screenWidth * 0.8).roundToInt())
-                .coerceAtMost(INITIAL_MAX_WIDTH)
-            val freeformHeight = sp.getInt("freeform_height", (screenHeight * 0.5).roundToInt())
-                .coerceAtMost(INITIAL_MAX_HEIGHT)
-            LMOFreeformServiceManager.createWindow(
-                packageName,
-                activityName,
-                userId,
-                taskId,
-                freeformWidth,
-                freeformHeight,
-                sp.getInt("freeform_dpi", screenDensityDpi)
-            )
-        }
+        val sp = context.getSharedPreferences(LMOFreeform.CONFIG, Context.MODE_PRIVATE)
+        val screenWidth = context.resources.displayMetrics.widthPixels
+        val screenHeight = context.resources.displayMetrics.heightPixels
+        val screenDensityDpi = context.resources.displayMetrics.densityDpi
+        val freeformWidth = sp.getInt("freeform_width", (screenWidth * 0.8).roundToInt())
+            .coerceAtMost(INITIAL_MAX_WIDTH)
+        val freeformHeight = sp.getInt("freeform_height", (screenHeight * 0.5).roundToInt())
+            .coerceAtMost(INITIAL_MAX_HEIGHT)
+        LMOFreeformServiceManager.createWindow(
+            packageName,
+            activityName,
+            userId,
+            taskId,
+            freeformWidth,
+            freeformHeight,
+            sp.getInt("freeform_dpi", screenDensityDpi)
+        )
     }
 
     private fun launchAppInNativeFreeform(context: Context, intent: Intent) {

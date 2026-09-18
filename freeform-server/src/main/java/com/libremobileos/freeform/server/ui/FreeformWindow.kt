@@ -263,7 +263,7 @@ class FreeformWindow(
     @SuppressLint("WrongConstant")
     private fun addFreeformView(): Boolean {
         dlog(TAG, "addFreeformView")
-        val tmpFreeformLayout = resourceHolder.getLayout(FREEFORM_LAYOUT)!! ?: return false
+        val tmpFreeformLayout = resourceHolder.getLayout(FREEFORM_LAYOUT) ?: return false
         freeformLayout = tmpFreeformLayout
         freeformRootView = resourceHolder.getLayoutChildViewByTag<FrameLayout>(freeformLayout, "freeform_root") ?: return false
         veilView = resourceHolder.getLayoutChildViewByTag<FrameLayout>(freeformLayout, "veilView") ?: return false
@@ -451,7 +451,7 @@ class FreeformWindow(
         LMOFreeformServiceHolder.releaseFreeform(this)
         FreeformWindowManager.removeWindow(getFreeformId())
         windowManagerInt.unregisterDisplaySecureContentListener(this)
-        freeformTaskStackListener!!.taskId.let {
+        freeformTaskStackListener?.taskId?.let {
             if (it != -1 && shouldRemoveTask) {
                 Slog.i(TAG, "destroy: remove taskId $it again")
                 runCatching { SystemServiceHolder.activityTaskManager.removeTask(it) }
