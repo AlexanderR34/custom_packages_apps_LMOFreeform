@@ -305,6 +305,31 @@ class FreeformWindow(
             height = freeformConfig.height
         }
         freeformRootView.addView(freeformView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        val isPortrait = defaultDisplayRotation == Surface.ROTATION_0 ||
+                defaultDisplayRotation == Surface.ROTATION_180
+        val sidebarPositionX = try {
+            android.provider.Settings.System.getInt(context.contentResolver, "sidebar_position_x", 1)
+        } catch (e: Exception) {
+            1
+        }
+        val sidebarPositionY = try {
+            android.provider.Settings.System.getInt(
+                context.contentResolver,
+                if (isPortrait) "sidebar_position_y_portrait" else "sidebar_position_y_landscape",
+                0
+            )
+        } catch (e: Exception) {
+            0
+        }
+
+        val density = context.resources.displayMetrics.density
+        val marginX = (48 * density).roundToInt()
+        val maxAvailableX = max(0, (defaultDisplayWidth - freeformConfig.width) / 2 - marginX)
+        val initialOffsetMultiplier = if (isPortrait) 0.50f else 0.65f
+        val calculatedX = (maxAvailableX * initialOffsetMultiplier).roundToInt()
+        val marginY = (36 * density).roundToInt()
+        val maxY = max(0, (defaultDisplayHeight - freeformConfig.height) / 2 - marginY)
+
         windowParams.apply {
             type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             width = WindowManager.LayoutParams.WRAP_CONTENT
@@ -315,10 +340,15 @@ class FreeformWindow(
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
                     WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
             format = PixelFormat.RGBA_8888
-            windowAnimations = android.R.style.Animation_Dialog
+            windowAnimations = 0
+            x = if (sidebarPositionX >= 0) calculatedX else -calculatedX
+            y = sidebarPositionY.coerceIn(-maxY, maxY)
         }
+        freeformConfig.notInHangUpX = windowParams.x
+        freeformConfig.notInHangUpY = windowParams.y
         runCatching {
             windowManager.addView(freeformLayout, windowParams)
+            FreeformAnimation.playEnterAnimation(this, sidebarPositionX)
             SystemServiceHolder.windowManager.watchRotation(rotationWatcher, Display.DEFAULT_DISPLAY)
             windowManagerInt.registerDisplaySecureContentListener(this)
         }.onFailure {
@@ -415,8 +445,87 @@ class FreeformWindow(
         return "${appConfig.packageName},${appConfig.activityName},${appConfig.userId}"
     }
 
+    private fun shouldKeepTaskAlive(): Boolean {
+        // 0. Check custom whitelist or global keep alive setting
+        try {
+            val keepAliveSetting = android.provider.Settings.System.getString(
+                context.contentResolver,
+                "lmo_freeform_keep_alive_apps"
+            )
+            if (!keepAliveSetting.isNullOrEmpty()) {
+                val list = keepAliveSetting.split(",")
+                if (list.contains(appConfig.packageName) || list.contains("*")) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Slog.w(TAG, "failed to check keep alive settings: $e")
+        }
+
+        // 1. Check if audio / music is playing or active communication
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            if (audioManager != null && (audioManager.isMusicActive || audioManager.mode != android.media.AudioManager.MODE_NORMAL)) {
+                return true
+            }
+        } catch (e: Exception) {
+            Slog.w(TAG, "failed to check audio manager: $e")
+        }
+
+        // 2. Check if the app has an active MediaSession (PlaybackState PLAYING / BUFFERING / CONNECTING)
+        try {
+            val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+            val sessions = mediaSessionManager?.getActiveSessions(null)
+            if (sessions != null) {
+                for (controller in sessions) {
+                    if (controller.packageName == appConfig.packageName) {
+                        val state = controller.playbackState?.state
+                        if (state == android.media.session.PlaybackState.STATE_PLAYING ||
+                            state == android.media.session.PlaybackState.STATE_BUFFERING ||
+                            state == android.media.session.PlaybackState.STATE_CONNECTING) {
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Slog.w(TAG, "failed to check media session: $e")
+        }
+
+        // 3. Check if the package is running a Foreground Service (Audio, Download, etc.)
+        try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val processes = am?.runningAppProcesses
+            if (processes != null) {
+                for (proc in processes) {
+                    if (proc.pkgList != null && proc.pkgList.contains(appConfig.packageName)) {
+                        if (proc.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE) {
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Slog.w(TAG, "failed to check running app processes: $e")
+        }
+
+        return false
+    }
+
     fun close() {
         dlog(TAG, "close()")
+        val currentTaskId = freeformTaskStackListener?.taskId ?: -1
+        if (currentTaskId != -1 && shouldKeepTaskAlive()) {
+            Slog.i(TAG, "App ${appConfig.packageName} has active playback/foreground service; preserving in background")
+            runCatching {
+                SystemServiceHolder.activityTaskManager.moveRootTaskToDisplayOnTopOrBottom(currentTaskId, Display.DEFAULT_DISPLAY, false)
+            }.onFailure { exception ->
+                Slog.e(TAG, "moveRootTaskToDisplayOnTopOrBottom failed: ", exception)
+            }
+            destroy("window.close(preserveBackgroundPlayback)", shouldRemoveTask = false)
+            return
+        }
+
         runCatching {
             SystemServiceHolder.activityTaskManager.removeTask(freeformTaskStackListener!!.taskId)
             removeView()
@@ -452,7 +561,7 @@ class FreeformWindow(
         FreeformWindowManager.removeWindow(getFreeformId())
         windowManagerInt.unregisterDisplaySecureContentListener(this)
         freeformTaskStackListener?.taskId?.let {
-            if (it != -1 && shouldRemoveTask) {
+            if (it != -1 && shouldRemoveTask && !shouldKeepTaskAlive()) {
                 Slog.i(TAG, "destroy: remove taskId $it again")
                 runCatching { SystemServiceHolder.activityTaskManager.removeTask(it) }
             }

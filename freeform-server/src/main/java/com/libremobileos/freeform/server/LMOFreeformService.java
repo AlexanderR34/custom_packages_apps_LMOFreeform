@@ -32,13 +32,18 @@ public class LMOFreeformService {
     public void injectInputEvent(InputEvent event, int displayId) {
         try {
             event.setDisplayId(displayId);
-            SystemServiceHolder.inputManagerService.injectInputEvent(event, 0);
+            android.hardware.input.IInputManager im = SystemServiceHolder.getInputManagerService();
+            if (im != null) {
+                im.injectInputEvent(event, 0);
+            } else {
+                Slog.e(TAG, "injectInputEvent failed: inputManagerService is null");
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
     public boolean isRunning() {
-        return null != SystemServiceHolder.inputManagerService;
+        return null != SystemServiceHolder.getInputManagerService();
     }
 }

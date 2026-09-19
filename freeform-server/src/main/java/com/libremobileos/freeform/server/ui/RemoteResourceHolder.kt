@@ -29,9 +29,17 @@ class RemoteResourceHolder(context: Context, private val resPkg: String) {
     }
 
     fun getLayout(layoutName: String): ViewGroup? {
+        if (!this::remoteContext.isInitialized) {
+            Slog.e(TAG, "getLayout: remoteContext is not initialized for $resPkg")
+            return null
+        }
         return try {
             val freeformLayoutId = remoteContext.resources.getIdentifier(layoutName, "layout", resPkg)
-                val r = LayoutInflater.from(remoteContext).inflate(freeformLayoutId, null, false)
+            if (freeformLayoutId == 0) {
+                Slog.e(TAG, "can not find layout resource id for $layoutName in $resPkg")
+                return null
+            }
+            val r = LayoutInflater.from(remoteContext).inflate(freeformLayoutId, null, false)
             if (null == r) Slog.e(TAG, "can not find layout $layoutName")
             r as ViewGroup
         } catch (e: Exception) {

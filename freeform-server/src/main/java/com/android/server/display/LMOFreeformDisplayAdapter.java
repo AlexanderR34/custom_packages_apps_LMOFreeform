@@ -79,15 +79,35 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
             mFreeformDisplayDevices.put(appToken, device);
             lmoFreeformDisplayCallbackArrayMap.put(device, callback);
 
-            mHandler.postDelayed(() -> {
-                LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
-                Slog.i(TAG, "findLogicalDisplayForDevice " + display);
-                try {
-                    callback.onDisplayAdd(display.getDisplayIdLocked());
-                } catch (Exception ignored) {
-
+            mHandler.post(() -> {
+                synchronized (getSyncRoot()) {
+                    LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
+                    Slog.i(TAG, "findLogicalDisplayForDevice " + display);
+                    if (display != null) {
+                        try {
+                            callback.onDisplayAdd(display.getDisplayIdLocked());
+                        } catch (Exception e) {
+                            Slog.e(TAG, "Failed to call onDisplayAdd", e);
+                        }
+                    } else {
+                        mHandler.postDelayed(() -> {
+                            synchronized (getSyncRoot()) {
+                                LogicalDisplay delayedDisplay = mLogicalDisplayMapper.getDisplayLocked(device);
+                                Slog.i(TAG, "findLogicalDisplayForDevice retry " + delayedDisplay);
+                                if (delayedDisplay != null) {
+                                    try {
+                                        callback.onDisplayAdd(delayedDisplay.getDisplayIdLocked());
+                                    } catch (Exception e) {
+                                        Slog.e(TAG, "Failed to call onDisplayAdd on retry", e);
+                                    }
+                                } else {
+                                    Slog.e(TAG, "findLogicalDisplayForDevice failed: display is null");
+                                }
+                            }
+                        }, 500);
+                    }
                 }
-            }, 500);
+            });
 
             try {
                 appToken.linkToDeath(device, 0);

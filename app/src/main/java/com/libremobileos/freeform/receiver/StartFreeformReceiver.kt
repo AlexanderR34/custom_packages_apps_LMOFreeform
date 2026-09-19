@@ -90,10 +90,42 @@ class StartFreeformReceiver : BroadcastReceiver() {
         val screenSize = Point()
         windowManager?.defaultDisplay?.getSize(screenSize)
 
-        val centerX = screenSize.x / 2
-        val centerY = screenSize.y / 2
         val width = (screenSize.x * 0.5).roundToInt()
         val height = (screenSize.y * 0.5).roundToInt()
+
+        val isPortrait = screenSize.y >= screenSize.x
+        val sidebarPositionX = intent.getIntExtra(
+            "sidebar_position_x",
+            try {
+                Settings.System.getInt(context.contentResolver, "sidebar_position_x", 1)
+            } catch (e: Exception) {
+                1
+            }
+        )
+        val sidebarPositionY = intent.getIntExtra(
+            "sidebar_position_y",
+            try {
+                Settings.System.getInt(
+                    context.contentResolver,
+                    if (isPortrait) "sidebar_position_y_portrait" else "sidebar_position_y_landscape",
+                    0
+                )
+            } catch (e: Exception) {
+                0
+            }
+        )
+
+        val margin = (16 * context.resources.displayMetrics.density).roundToInt()
+        val centerX = if (sidebarPositionX >= 0) {
+            screenSize.x - width / 2 - margin
+        } else {
+            width / 2 + margin
+        }
+        val centerY = (screenSize.y / 2 + sidebarPositionY).coerceIn(
+            height / 2 + margin,
+            screenSize.y - height / 2 - margin
+        )
+
         val launchBounds = Rect(centerX - width / 2, centerY - height / 2, centerX + width / 2, centerY + height / 2)
 
         val activityOptions = ActivityOptions.makeBasic().apply {
