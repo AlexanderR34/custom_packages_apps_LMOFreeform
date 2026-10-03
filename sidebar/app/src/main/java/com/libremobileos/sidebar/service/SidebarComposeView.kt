@@ -1,5 +1,6 @@
-package com.libremobileos.sidebar.service
+﻿package com.libremobileos.sidebar.service
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
@@ -32,12 +33,16 @@ fun SidebarComposeView(
     val sidebarAppList by viewModel.sidebarAppListFlow.collectAsState()
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f)
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
         modifier = modifier
     ) {
-        LazyColumn {
+        LazyColumn(
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
+        ) {
             item {
                 Icon(
                     painter = rememberDrawablePainter(
@@ -45,8 +50,8 @@ fun SidebarComposeView(
                     ),
                     contentDescription = viewModel.allAppActivity.label,
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(8.dp)
+                        .size(52.dp)
+                        .padding(9.dp)
                         .clickable {
                             launchApp(viewModel.allAppActivity)
                         }
@@ -59,8 +64,8 @@ fun SidebarComposeView(
                     ),
                     contentDescription = appInfo.label,
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(8.dp)
+                        .size(52.dp)
+                        .padding(9.dp)
                         .clickable {
                             launchApp(appInfo)
                         }
@@ -71,8 +76,8 @@ fun SidebarComposeView(
                     painter = painterResource(R.drawable.edit_24px),
                     contentDescription = stringResource(R.string.sidebar_settings_description),
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(10.dp)
+                        .size(52.dp)
+                        .padding(11.dp)
                         .clickable {
                             viewModel.openSidebarSettings()
                             closeSidebar()
