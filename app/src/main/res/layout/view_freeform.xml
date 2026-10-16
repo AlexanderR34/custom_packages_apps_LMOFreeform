@@ -1,115 +1,87 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/color_background"
-    app:cardCornerRadius="26dp"
-    app:cardElevation="18dp"
-    app:cardMaxElevation="24dp"
-    app:cardPreventCornerOverlap="true"
-    app:cardUseCompatPadding="false">
+    app:cardCornerRadius="16dp"
+    app:cardBackgroundColor="@color/color_surface">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content">
 
-        <!-- HyperOS Floating Capsule Top Bar -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/topBarView"
-            android:layout_width="0dp"
-            android:layout_height="22dp"
-            android:background="@drawable/color_background"
             android:tag="topBarView"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/top_bar_height"
+            android:background="@drawable/color_background"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
-
-            <!-- HyperOS Centered Pill Indicator Handle -->
-            <View
-                android:id="@+id/pillHandle"
-                android:layout_width="44dp"
-                android:layout_height="4.5dp"
-                android:background="@drawable/hyperos_pill_handle"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
             <ImageView
                 android:id="@+id/appIcon"
-                android:layout_width="16dp"
+                android:layout_width="24dp"
                 android:layout_height="16dp"
-                android:layout_marginStart="10dp"
-                android:alpha="0.85"
+                android:layout_marginStart="6dp"
                 android:tag="appIcon"
-                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
             <TextView
                 android:id="@+id/packageName"
+                android:tag="packageName"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="2dp"
                 android:layout_marginEnd="6dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:tag="packageName"
+                android:textSize="11sp"
                 android:textColor="@color/color_text"
-                android:textSize="10sp"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/pinView"
                 app:layout_constraintStart_toEndOf="@id/appIcon"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintEnd_toStartOf="@id/pinView"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
             <View
                 android:id="@+id/spacer"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:tag="spacer"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/pinView"
                 app:layout_constraintStart_toEndOf="@id/packageName"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintEnd_toStartOf="@id/pinView"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
             <ImageView
                 android:id="@+id/pinView"
-                android:layout_width="16dp"
+                android:layout_width="24dp"
                 android:layout_height="16dp"
                 android:layout_marginEnd="6dp"
-                android:alpha="0.75"
-                android:src="@drawable/ic_pin"
                 android:tag="pinView"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:src="@drawable/ic_pin"
                 app:layout_constraintEnd_toStartOf="@id/maximizeView"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
             <ImageView
                 android:id="@+id/maximizeView"
-                android:layout_width="16dp"
+                android:layout_width="24dp"
                 android:layout_height="16dp"
                 android:layout_marginEnd="6dp"
-                android:alpha="0.75"
-                android:src="@drawable/ic_maximize"
                 android:tag="maximizeView"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:src="@drawable/ic_maximize"
                 app:layout_constraintEnd_toStartOf="@id/minimizeView"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
             <ImageView
                 android:id="@+id/minimizeView"
-                android:layout_width="16dp"
+                android:layout_width="24dp"
                 android:layout_height="16dp"
-                android:layout_marginEnd="10dp"
-                android:alpha="0.75"
-                android:src="@drawable/ic_minimize"
+                android:layout_marginEnd="6dp"
                 android:tag="minimizeView"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:src="@drawable/ic_minimize"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <FrameLayout
@@ -131,21 +103,19 @@
             app:layout_constraintBottom_toTopOf="@+id/bottomBar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/topBarView">
-
+            app:layout_constraintTop_toBottomOf="@+id/topBarView" >
             <ImageView
                 android:id="@+id/veilAppIcon"
+                android:tag="veilAppIcon"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:layout_gravity="center"
-                android:tag="veilAppIcon" />
+                android:layout_centerInParent="true"/>
         </FrameLayout>
 
-        <!-- HyperOS Minimal Gesture Bottom Bar -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/bottomBar"
             android:layout_width="0dp"
-            android:layout_height="18dp"
+            android:layout_height="@dimen/bottom_bar_height"
             android:background="@drawable/color_background"
             android:gravity="center"
             android:tag="bottomBarView"
@@ -184,9 +154,9 @@
                 app:layout_constraintTop_toTopOf="parent">
 
                 <View
-                    android:layout_width="36dp"
-                    android:layout_height="4dp"
-                    android:background="@drawable/hyperos_bottom_pill" />
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:background="@drawable/ic_arrow_back" />
             </LinearLayout>
 
             <LinearLayout
@@ -212,16 +182,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:tag="guideline2"
-                app:layout_constraintGuide_percent="0.33" />
+                app:layout_constraintGuide_percent="0.33"
+                android:tag="guideline2" />
 
             <androidx.constraintlayout.widget.Guideline
                 android:id="@+id/guideline3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:tag="guideline3"
-                app:layout_constraintGuide_percent="0.67" />
+                app:layout_constraintGuide_percent="0.67"
+                android:tag="guideline3" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
