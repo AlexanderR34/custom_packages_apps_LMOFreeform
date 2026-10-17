@@ -14,26 +14,55 @@ import kotlin.math.roundToInt
 
 class MoveTouchListener(
     private val window: FreeformWindow
-) : View.OnTouchListener{
+) : View.OnTouchListener {
     private var startX = 0.0f
     private var startY = 0.0f
+    private var isDragging = false
+    private val touchSlop = 16f
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 startX = event.rawX
                 startY = event.rawY
+                isDragging = false
+                window.resetCornerAutoHideTimer()
+                if (window.displayId > 0) {
+                    runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
+                }
+                val currentTaskId = window.freeformTaskStackListener?.taskId ?: -1
+                runCatching {
+                    if (currentTaskId != -1) {
+                        SystemServiceHolder.activityTaskManager.setFocusedTask(currentTaskId)
+                    } else if (window.displayId > 0) {
+                        SystemServiceHolder.activityTaskManager.focusTopTask(window.displayId)
+                    }
+                }
             }
             MotionEvent.ACTION_MOVE -> {
-                window.windowManager.updateViewLayout(window.freeformLayout, window.windowParams.apply {
-                    x = (x + event.rawX - startX).roundToInt()
-                    y = (y + event.rawY - startY).roundToInt()
-                })
-                startX = event.rawX
-                startY = event.rawY
+                val dx = event.rawX - startX
+                val dy = event.rawY - startY
+                if (!isDragging && (kotlin.math.abs(dx) > touchSlop || kotlin.math.abs(dy) > touchSlop)) {
+                    isDragging = true
+                    window.hideSubmenuIfOpen()
+                }
+                if (isDragging) {
+                    window.windowManager.updateViewLayout(window.freeformLayout, window.windowParams.apply {
+                        x = (x + dx).roundToInt()
+                        y = (y + dy).roundToInt()
+                    })
+                    startX = event.rawX
+                    startY = event.rawY
+                }
             }
             MotionEvent.ACTION_UP -> {
-                window.makeSureFreeformInScreen()
+                if (!isDragging) {
+                    v.performClick()
+                    window.toggleSubmenu()
+                } else {
+                    window.makeSureFreeformInScreen()
+                }
             }
         }
         return true
@@ -92,10 +121,28 @@ class ScaleTouchListener(private val window: FreeformWindow, private val isRight
             MotionEvent.ACTION_DOWN -> {
                 startX = event.rawX
                 startY = event.rawY
+                window.resetCornerAutoHideTimer()
+                window.hideSubmenuIfOpen()
+                if (window.displayId > 0) {
+                    runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
+                }
+                val currentTaskId = window.freeformTaskStackListener?.taskId ?: -1
+                runCatching {
+                    if (currentTaskId != -1) {
+                        SystemServiceHolder.activityTaskManager.setFocusedTask(currentTaskId)
+                    } else if (window.displayId > 0) {
+                        SystemServiceHolder.activityTaskManager.focusTopTask(window.displayId)
+                    }
+                }
+                if (window.freeformConfig.isHangUp) {
+                    window.handleHangUp()
+                    return true
+                }
                 window.freeformRootView.visibility = View.INVISIBLE
                 window.veilView.visibility = View.VISIBLE
             }
             MotionEvent.ACTION_MOVE -> {
+                window.resetCornerAutoHideTimer()
                 window.freeformRootView.layoutParams = window.freeformRootView.layoutParams.apply {
                     width = max(25, (window.freeformRootView.width + if (isRight) (event.rawX - startX) else (startX - event.rawX)).roundToInt())
                     height = max(25, (window.freeformRootView.height + event.rawY - startY).roundToInt())
@@ -104,6 +151,7 @@ class ScaleTouchListener(private val window: FreeformWindow, private val isRight
                 startY = event.rawY
             }
             MotionEvent.ACTION_UP -> {
+                window.resetCornerAutoHideTimer()
                 if (window.freeformView.surfaceTexture != null) {
                     window.freeformConfig.width = window.freeformRootView.layoutParams.width
                     window.freeformConfig.height = window.freeformRootView.layoutParams.height

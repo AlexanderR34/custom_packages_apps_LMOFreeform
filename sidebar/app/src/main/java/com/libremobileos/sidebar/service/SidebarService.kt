@@ -43,6 +43,9 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
     private var screenHeight = 0
     private val layoutParams = LayoutParams()
     private val handler = Handler()
+    private var adaptiveLuminanceHelper: AdaptiveLuminanceHelper? = null
+    private var hyperOSHandleDrawable: HyperOSHandleDrawable? = null
+
     private val sideLineView by lazy {
         val gestureManager = MGestureManager(this@SidebarService, GestureListener(this@SidebarService))
         View(this).apply {
@@ -51,6 +54,56 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                 gestureManager.onTouchEvent(event)
                 true
             }
+        }
+    }
+
+    private fun updateCurvedCornerState() {
+        val currentStyle = sharedPrefs.getString(
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+            SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+        )
+        val handle = hyperOSHandleDrawable ?: return
+        handle.isLandscape = !isPortrait
+        handle.isDockedOnLeft = (sidelinePositionX <= 0)
+
+        if (currentStyle != SidebarApplication.STYLE_NEW || isPortrait) {
+            handle.isCurvedCornerMode = false
+            return
+        }
+
+        val isAtTopLateralEdge = layoutParams.y <= -(screenHeight * 0.16f)
+        handle.isCurvedCornerMode = isAtTopLateralEdge
+    }
+
+    private fun updateHandleStyle(isNewStyle: Boolean) {
+        logger.d("updateHandleStyle: isNewStyle=$isNewStyle")
+        if (isNewStyle) {
+            if (hyperOSHandleDrawable == null) {
+                hyperOSHandleDrawable = HyperOSHandleDrawable(this@SidebarService)
+            }
+            hyperOSHandleDrawable?.apply {
+                isLandscape = !isPortrait
+                isDockedOnLeft = (sidelinePositionX <= 0)
+                setLuminance(viewModel.isBackgroundDarkFlow.value, animate = false)
+            }
+            updateCurvedCornerState()
+            sideLineView.background = hyperOSHandleDrawable
+
+            if (adaptiveLuminanceHelper == null) {
+                adaptiveLuminanceHelper = AdaptiveLuminanceHelper(this@SidebarService) { isDark, _ ->
+                    viewModel.updateBackgroundDark(isDark)
+                    hyperOSHandleDrawable?.setLuminance(isDark, animate = true)
+                }
+            }
+            if (isShowingSideline) {
+                sideLineView.post {
+                    adaptiveLuminanceHelper?.startSampling(sideLineView)
+                }
+            }
+        } else {
+            adaptiveLuminanceHelper?.stopSampling()
+            sideLineView.background = AppCompatResources.getDrawable(this@SidebarService, R.drawable.ic_line)
+            sideLineView.background?.clearColorFilter()
         }
     }
 
@@ -115,11 +168,27 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         sidebarView = SidebarView(this@SidebarService, viewModel, object : SidebarView.Callback {
             override fun onRemove() {
                 logger.d("sidebar view removed")
-                if (isShowingSidebar && showSideline) animateShowSideline()
+                if (isShowingSidebar && showSideline) {
+                    animateShowSideline()
+                    val currentStyle = sharedPrefs.getString(
+                        SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                        SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                    )
+                    if (currentStyle == SidebarApplication.STYLE_NEW) {
+                        sideLineView.post {
+                            adaptiveLuminanceHelper?.startSampling(sideLineView)
+                        }
+                    }
+                }
                 isShowingSidebar = false
             }
-        })
+        }, adaptiveLuminanceHelper = { adaptiveLuminanceHelper })
         isShowingSidebar = false
+        val currentStyle = sharedPrefs.getString(
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+            SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+        )
+        updateHandleStyle(currentStyle == SidebarApplication.STYLE_NEW)
         showSideline = sharedPrefs.getBoolean(SIDELINE, false)
         logger.d("screenWidth=$screenWidth screenHeight=$screenHeight showSideline=$showSideline")
         if (showSideline) showView()
@@ -139,6 +208,7 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
 
         if (showSideline) {
             updateSidelinePosition()
+            updateCurvedCornerState()
         }
         if (isShowingSidebar) {
             sidebarView.updateSidebarPosition()
@@ -151,6 +221,9 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         sharedPrefs.unregisterOnSharedPreferenceChangeListener(this)
         iActivityManager.unregisterUserSwitchObserver(userSwitchObserver)
         removeView(force = true)
+        adaptiveLuminanceHelper?.destroy()
+        adaptiveLuminanceHelper = null
+        hyperOSHandleDrawable = null
         viewModel.destroy()
     }
 
@@ -164,11 +237,35 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                     removeView(force = true)
                 }
             }
+            SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT,
+            SidebarApplication.KEY_SIDEBAR_WIDTH_DP -> {
+                val currentStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                if (isShowingSidebar && currentStyle == SidebarApplication.STYLE_STOCK) {
+                    sidebarView.updateSidebarPosition()
+                }
+            }
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE -> {
+                val newStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                updateHandleStyle(newStyle == SidebarApplication.STYLE_NEW)
+            }
         }
     }
 
     override fun showSidebar() {
         logger.d("showSidebar")
+        val currentStyle = sharedPrefs.getString(
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+            SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+        )
+        if (currentStyle == SidebarApplication.STYLE_NEW) {
+            adaptiveLuminanceHelper?.stopSampling()
+        }
         sidebarView.showView()
         isShowingSidebar = true
         animateHideSideline()
@@ -195,6 +292,7 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
             x = sidelinePositionX * (screenWidth / 2 - offset)
             y = layoutParams.y + yChanged
         }
+        updateCurvedCornerState()
         updateViewLayout()
     }
 
@@ -204,12 +302,22 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
             width = SIDELINE_WIDTH
             y = constrainY(y)
         }
+        updateCurvedCornerState()
         updateViewLayout()
         setIntSp(SIDELINE_POSITION_X, sidelinePositionX)
         if (isPortrait) {
             setIntSp(SIDELINE_POSITION_Y_PORTRAIT, layoutParams.y)
         } else {
             setIntSp(SIDELINE_POSITION_Y_LANDSCAPE, layoutParams.y)
+        }
+        val currentStyle = sharedPrefs.getString(
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+            SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+        )
+        if (currentStyle == SidebarApplication.STYLE_NEW) {
+            sideLineView.post {
+                adaptiveLuminanceHelper?.updateSamplingRect(sideLineView)
+            }
         }
     }
 
@@ -263,6 +371,15 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                 windowManager.addView(sideLineView, layoutParams)
                 viewModel.registerCallbacks()
                 isShowingSideline = true
+                val currentStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                if (currentStyle == SidebarApplication.STYLE_NEW) {
+                    sideLineView.post {
+                        adaptiveLuminanceHelper?.startSampling(sideLineView)
+                    }
+                }
             }.onFailure { e ->
                 logger.e("failed to add sideline view: ", e)
             }
@@ -281,6 +398,7 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
             x = sidelinePositionX * (screenWidth / 2 - offset)
             y = constrainY(sidelinePositionY)
             logger.d("updateSidelinePosition: ($x,$y)")
+            updateCurvedCornerState()
 
             if (isPortrait) {
                 layoutInDisplayCutoutMode = LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
@@ -303,6 +421,15 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         handler.post {
             runCatching {
                 windowManager.updateViewLayout(sideLineView, layoutParams)
+                val currentStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                if (currentStyle == SidebarApplication.STYLE_NEW) {
+                    sideLineView.post {
+                        adaptiveLuminanceHelper?.updateSamplingRect(sideLineView)
+                    }
+                }
             }.onFailure { e ->
                 logger.e("failed to updateViewLayout: ", e)
             }
@@ -313,6 +440,7 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
         if (!isShowingSideline && !force) return
 
         logger.d("removeView")
+        adaptiveLuminanceHelper?.stopSampling()
         viewModel.unregisterCallbacks()
 
         handler.post {

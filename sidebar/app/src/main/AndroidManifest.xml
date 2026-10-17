@@ -30,7 +30,8 @@
         <activity
             android:name=".ui.all_app.AllAppActivity"
             android:exported="true"
-            android:excludeFromRecents="true"/>
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.AllApp"/>
 
         <service android:name=".service.SidebarService"/>
 

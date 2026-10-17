@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <!-- Bottom-Left L-shaped Curved Corner Handle -->
+    <path
+        android:strokeColor="#C8E6E8EA"
+        android:strokeWidth="3.2"
+        android:strokeCap="round"
+        android:pathData="M 4,6 L 4,14 A 10,10 0 0,0 14,24 L 22,24" />
+</vector>

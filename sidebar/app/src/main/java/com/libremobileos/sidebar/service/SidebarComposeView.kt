@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,12 +31,18 @@ fun SidebarComposeView(
     modifier: Modifier = Modifier
 ) {
     val sidebarAppList by viewModel.sidebarAppListFlow.collectAsState()
+    val sidebarWidthDp by viewModel.sidebarWidthDpFlow.collectAsState()
+
+    val itemSize = sidebarWidthDp.dp
+    val iconPadding = (sidebarWidthDp * 0.16f).dp
+    val editPadding = (sidebarWidthDp * 0.20f).dp
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier
+        modifier = modifier.width(itemSize)
     ) {
         LazyColumn {
             item {
@@ -45,8 +52,8 @@ fun SidebarComposeView(
                     ),
                     contentDescription = viewModel.allAppActivity.label,
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(8.dp)
+                        .size(itemSize)
+                        .padding(iconPadding)
                         .clickable {
                             launchApp(viewModel.allAppActivity)
                         }
@@ -59,8 +66,8 @@ fun SidebarComposeView(
                     ),
                     contentDescription = appInfo.label,
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(8.dp)
+                        .size(itemSize)
+                        .padding(iconPadding)
                         .clickable {
                             launchApp(appInfo)
                         }
@@ -71,8 +78,8 @@ fun SidebarComposeView(
                     painter = painterResource(R.drawable.edit_24px),
                     contentDescription = stringResource(R.string.sidebar_settings_description),
                     modifier = Modifier
-                        .size(50.dp)
-                        .padding(10.dp)
+                        .size(itemSize)
+                        .padding(editPadding)
                         .clickable {
                             viewModel.openSidebarSettings()
                             closeSidebar()

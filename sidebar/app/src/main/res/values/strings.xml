@@ -9,4 +9,21 @@
     <string name="sidebar_settings_description">Open sidebar settings</string>
     <string name="sidebar_predicted_apps">Show app suggestions</string>
     <string name="sidebar_predicted_apps_summary">Show upto 6 suggested apps below pinned apps</string>
+    <string name="sidebar_design_title">Sidebar layout</string>
+    <string name="sidebar_design_summary">Customize sidebar appearance and styles</string>
+    <string name="sidebar_length_title">Sidebar length</string>
+    <string name="sidebar_length_summary">Adjust the vertical length of the sidebar</string>
+    <string name="sidebar_width_title">Sidebar width</string>
+    <string name="sidebar_width_summary">Make the sidebar wider or thinner</string>
+    <string name="sidebar_drawer_height_title">App drawer length</string>
+    <string name="sidebar_drawer_height_summary">Adjust the length of the freeform app drawer</string>
+    <string name="sidebar_reset">Restablecer</string>
+    <string name="sidebar_reset_all">Reset all to default</string>
+    <string name="sidebar_window_style_title">Pop-up window controls design</string>
+    <string name="sidebar_window_style_summary">Select design for floating window controls and header</string>
+    <string name="sidebar_window_style_stock">Stock design</string>
+    <string name="sidebar_window_style_stock_summary">Original default controls</string>
+    <string name="sidebar_window_style_new">New design</string>
+    <string name="sidebar_window_style_new_summary">Modernized window controls layout</string>
+    <string name="sidebar_sliders_stock_only_notice">Size sliders only apply to Stock design. The new HyperOS design uses fixed optimized dimensions.</string>
 </resources>

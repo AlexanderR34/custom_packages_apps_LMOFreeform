@@ -1,6 +1,7 @@
 package com.android.server.display;
 
 import static com.android.server.display.DisplayDeviceInfo.FLAG_TRUSTED;
+import static com.android.server.display.DisplayDeviceInfo.FLAG_OWN_FOCUS;
 
 import android.content.Context;
 import android.os.Handler;
@@ -287,6 +288,7 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
                 mInfo.touch = DisplayDeviceInfo.TOUCH_VIRTUAL;
                 // The display is trusted since it is created by system.
                 mInfo.flags |= FLAG_TRUSTED;
+                mInfo.flags |= FLAG_OWN_FOCUS;
                 mInfo.displayShape = DisplayShape.createDefaultDisplayShape(mInfo.width, mInfo.height, false);
             }
             return mInfo;

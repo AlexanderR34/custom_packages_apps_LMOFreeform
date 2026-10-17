@@ -13,6 +13,8 @@ import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -35,7 +37,8 @@ import kotlin.math.roundToInt
 class SidebarView(
     private val context: Context,
     private val viewModel: ServiceViewModel,
-    private val callback: Callback
+    private val callback: Callback,
+    private val adaptiveLuminanceHelper: (() -> AdaptiveLuminanceHelper?)? = null
 ) : SavedStateRegistryOwner {
 
     private var lifecycleRegistry = LifecycleRegistry(this)
@@ -117,6 +120,15 @@ class SidebarView(
                 windowManager.addView(composeView, layoutParams)
                 composeView.animate().translationX(0f).setDuration(300).start()
                 isShowing = true
+                val currentStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                if (currentStyle == SidebarApplication.STYLE_NEW) {
+                    composeView.post {
+                        adaptiveLuminanceHelper?.invoke()?.startSampling(composeView)
+                    }
+                }
             }.onFailure {
                 logger.e("failed to add sidebar view: ", it)
             }
@@ -129,6 +141,13 @@ class SidebarView(
         logger.d("removeView")
         handler.post {
             runCatching {
+                val currentStyle = sharedPrefs.getString(
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                    SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                )
+                if (currentStyle == SidebarApplication.STYLE_NEW) {
+                    adaptiveLuminanceHelper?.invoke()?.stopSampling()
+                }
                 lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
                 windowManager.removeViewImmediate(composeView)
                 callback.onRemove()
@@ -142,10 +161,27 @@ class SidebarView(
     fun updateSidebarPosition() {
         val screenWidth = context.resources.displayMetrics.widthPixels
         val screenHeight = context.resources.displayMetrics.heightPixels
-        val sidebarHeight = if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+        val baseSidebarHeight = if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
             screenHeight / 3
         } else {
             (screenHeight * 0.8f).roundToInt()
+        }
+        val currentStyle = sharedPrefs.getString(
+            SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+            SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+        )
+        val sidebarHeight = if (currentStyle == SidebarApplication.STYLE_NEW) {
+            if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                (screenHeight * 0.46f).roundToInt()
+            } else {
+                (screenHeight * 0.82f).roundToInt()
+            }
+        } else {
+            val lengthPercent = sharedPrefs.getInt(
+                SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT,
+                SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT
+            )
+            (baseSidebarHeight * (lengthPercent / 100f)).roundToInt()
         }
 
         sidebarPositionX = sharedPrefs.getInt(SidebarService.SIDELINE_POSITION_X, 1)
@@ -155,11 +191,14 @@ class SidebarView(
             0
         }
 
+        val maxOffsetY = (screenHeight - sidebarHeight) / 2 - 32
+        val clampedY = sidebarPositionY.coerceIn(-maxOffsetY, maxOffsetY)
+
         layoutParams.apply {
             width = LayoutParams.WRAP_CONTENT
             height = sidebarHeight
             x = sidebarPositionX * (screenWidth / 2 - OFFSET_X)
-            y = sidebarPositionY
+            y = clampedY
         }
 
         logger.d("updateSidebarPosition: posX=$sidebarPositionX posY=$sidebarPositionY" +
@@ -169,6 +208,15 @@ class SidebarView(
             handler.post {
                 runCatching {
                     windowManager.updateViewLayout(composeView, layoutParams)
+                    val currentStyle = sharedPrefs.getString(
+                        SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                        SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
+                    )
+                    if (currentStyle == SidebarApplication.STYLE_NEW) {
+                        composeView.post {
+                            adaptiveLuminanceHelper?.invoke()?.updateSamplingRect(composeView)
+                        }
+                    }
                 }.onFailure { e ->
                     logger.e("failed to updateViewLayout: ", e)
                 }
@@ -184,14 +232,26 @@ class SidebarView(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SidebarTheme {
-                    SidebarComposeView(
-                        viewModel = viewModel,
-                        launchApp = { launchAppInFreeform(it) },
-                        closeSidebar = { removeView() },
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .wrapContentWidth()
-                    )
+                    val windowStyle by viewModel.windowStyleFlow.collectAsState()
+                    if (windowStyle == SidebarApplication.STYLE_NEW) {
+                        CustomSidebarComposeView(
+                            viewModel = viewModel,
+                            launchApp = { launchAppInFreeform(it) },
+                            closeSidebar = { removeView() },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .wrapContentWidth()
+                        )
+                    } else {
+                        SidebarComposeView(
+                            viewModel = viewModel,
+                            launchApp = { launchAppInFreeform(it) },
+                            closeSidebar = { removeView() },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .wrapContentWidth()
+                        )
+                    }
                 }
             }
         }

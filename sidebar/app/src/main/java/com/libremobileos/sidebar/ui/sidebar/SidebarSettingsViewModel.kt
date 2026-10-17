@@ -111,6 +111,78 @@ class SidebarSettingsViewModel(private val application: Application) : AndroidVi
             .putBoolean(KEY_SHOW_PREDICTED_APPS, enabled)
             .apply()
 
+    fun getSidebarLengthPercent(): Int =
+        if (isEnabled) sp.getInt(SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT)
+        else SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT
+
+    fun setSidebarLengthPercent(percent: Int) {
+        if (!isEnabled) return
+        sp.edit().putInt(SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT, percent).apply()
+    }
+
+    fun getSidebarWidthDp(): Int =
+        if (isEnabled) sp.getInt(SidebarApplication.KEY_SIDEBAR_WIDTH_DP, SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP)
+        else SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP
+
+    fun setSidebarWidthDp(widthDp: Int) {
+        if (!isEnabled) return
+        sp.edit().putInt(SidebarApplication.KEY_SIDEBAR_WIDTH_DP, widthDp).apply()
+    }
+
+    fun getAllAppsHeightPercent(): Int =
+        if (isEnabled) sp.getInt(SidebarApplication.KEY_ALL_APPS_HEIGHT_PERCENT, SidebarApplication.DEFAULT_ALL_APPS_HEIGHT_PERCENT)
+        else SidebarApplication.DEFAULT_ALL_APPS_HEIGHT_PERCENT
+
+    fun setAllAppsHeightPercent(percent: Int) {
+        if (!isEnabled) return
+        sp.edit().putInt(SidebarApplication.KEY_ALL_APPS_HEIGHT_PERCENT, percent).apply()
+    }
+
+    fun getFreeformWindowStyle(): String =
+        if (isEnabled) {
+            try {
+                android.provider.Settings.System.getString(
+                    appContext.contentResolver,
+                    SidebarApplication.KEY_FREEFORM_WINDOW_STYLE
+                ) ?: sp.getString(SidebarApplication.KEY_FREEFORM_WINDOW_STYLE, SidebarApplication.STYLE_STOCK) ?: SidebarApplication.STYLE_STOCK
+            } catch (e: Exception) {
+                sp.getString(SidebarApplication.KEY_FREEFORM_WINDOW_STYLE, SidebarApplication.STYLE_STOCK) ?: SidebarApplication.STYLE_STOCK
+            }
+        } else SidebarApplication.STYLE_STOCK
+
+    fun setFreeformWindowStyle(style: String) {
+        if (!isEnabled) return
+        sp.edit().putString(SidebarApplication.KEY_FREEFORM_WINDOW_STYLE, style).apply()
+        try {
+            android.provider.Settings.System.putString(
+                appContext.contentResolver,
+                SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                style
+            )
+        } catch (e: Exception) {
+            logger.e("Failed to write freeform_window_style to Settings.System", e)
+        }
+    }
+
+    fun resetDesignToDefault() {
+        if (!isEnabled) return
+        sp.edit()
+            .putInt(SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT)
+            .putInt(SidebarApplication.KEY_SIDEBAR_WIDTH_DP, SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP)
+            .putInt(SidebarApplication.KEY_ALL_APPS_HEIGHT_PERCENT, SidebarApplication.DEFAULT_ALL_APPS_HEIGHT_PERCENT)
+            .putString(SidebarApplication.KEY_FREEFORM_WINDOW_STYLE, SidebarApplication.STYLE_STOCK)
+            .apply()
+        try {
+            android.provider.Settings.System.putString(
+                appContext.contentResolver,
+                SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                SidebarApplication.STYLE_STOCK
+            )
+        } catch (e: Exception) {
+            logger.e("Failed to reset freeform_window_style in Settings.System", e)
+        }
+    }
+
     private fun initAllAppList() {
         viewModelScope.launch(Dispatchers.IO) {
             userManager.getSidebarFilteredUsers().forEach { userInfo ->

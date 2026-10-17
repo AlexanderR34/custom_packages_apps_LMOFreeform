@@ -32,6 +32,7 @@ import com.libremobileos.sidebar.utils.Logger
 import com.libremobileos.sidebar.utils.contains
 import com.libremobileos.sidebar.utils.getBadgedIcon
 import com.libremobileos.sidebar.utils.getInfo
+import com.libremobileos.sidebar.utils.getSidebarFilteredUsers
 import com.libremobileos.sidebar.utils.isResizeableActivity
 import com.libremobileos.sidebar.utils.isSidebarUserAllowed
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.text.Collator
+import java.util.Collections
+import java.util.Locale
 
 /**
  * @author KindBrave
@@ -55,6 +59,40 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
     val sidebarAppListFlow: StateFlow<List<AppInfo>>
         get() = _sidebarAppList.asStateFlow()
     private val _sidebarAppList = MutableStateFlow<List<AppInfo>>(emptyList())
+
+    val allInstalledAppsFlow: StateFlow<List<AppInfo>>
+        get() = _allInstalledApps.asStateFlow()
+    private val _allInstalledApps = MutableStateFlow<List<AppInfo>>(emptyList())
+
+    val hyperOSAppListFlow: StateFlow<List<AppInfo>>
+        get() = _hyperOSAppList.asStateFlow()
+    private val _hyperOSAppList = MutableStateFlow<List<AppInfo>>(emptyList())
+
+    private val appComparator = AppComparator()
+
+    val sidebarWidthDpFlow: StateFlow<Int>
+        get() = _sidebarWidthDp.asStateFlow()
+    private val _sidebarWidthDp = MutableStateFlow(
+        appContext.getSharedPreferences(SidebarApplication.CONFIG, Context.MODE_PRIVATE)
+            .getInt(SidebarApplication.KEY_SIDEBAR_WIDTH_DP, SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP)
+    )
+
+    val windowStyleFlow: StateFlow<String>
+        get() = _windowStyle.asStateFlow()
+    private val _windowStyle = MutableStateFlow(
+        appContext.getSharedPreferences(SidebarApplication.CONFIG, Context.MODE_PRIVATE)
+            .getString(SidebarApplication.KEY_FREEFORM_WINDOW_STYLE, SidebarApplication.STYLE_STOCK) ?: SidebarApplication.STYLE_STOCK
+    )
+
+    val isBackgroundDarkFlow: StateFlow<Boolean>
+        get() = _isBackgroundDark.asStateFlow()
+    private val _isBackgroundDark = MutableStateFlow(true)
+
+    fun updateBackgroundDark(isDark: Boolean) {
+        if (_isBackgroundDark.value != isDark) {
+            _isBackgroundDark.value = isDark
+        }
+    }
 
     private val predictedAppList = MutableStateFlow<List<AppInfo>>(emptyList())
 
@@ -93,10 +131,12 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
             _sidebarAppList.value.getInfo(packageName, user)?.let {
                 repository.deleteSidebarApp(it.packageName, it.activityName, it.userId)
             }
+            loadAllInstalledApps()
         }
 
         override fun onPackageAdded(packageName: String, user: UserHandle) {
-
+            logger.d("onPackageAdded: $packageName")
+            loadAllInstalledApps()
         }
 
         override fun onPackageChanged(packageName: String, user: UserHandle) {
@@ -105,6 +145,8 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
                 val appInfo = application.packageManager.getApplicationInfo(packageName, 0)
                 if (!appInfo.enabled) {
                     onPackageRemoved(packageName, user)
+                } else {
+                    loadAllInstalledApps()
                 }
             } catch (e: PackageManager.NameNotFoundException) {
                 onPackageRemoved(packageName, user)
@@ -119,6 +161,7 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
             replacing: Boolean
         ) {
             logger.d("onPackagesAvailable: ${packageNames.contentToString()}, $user")
+            loadAllInstalledApps()
         }
 
         override fun onPackagesUnavailable(
@@ -127,6 +170,7 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
             replacing: Boolean
         ) {
             logger.d("onPackagesUnavailable: ${packageNames.contentToString()}, $user")
+            loadAllInstalledApps()
         }
     }
 
@@ -181,10 +225,12 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
                     logger.d("userProfileReceiver added apps: $newApps")
                     // add them at the top
                     _sidebarAppList.value = newApps + _sidebarAppList.value
+                    loadAllInstalledApps()
                 }
                 ACTION_PROFILE_UNAVAILABLE -> {
                     _sidebarAppList.value = _sidebarAppList.value
                         .filter { it.userId != userId }
+                    loadAllInstalledApps()
                 }
             }
         }
@@ -195,6 +241,18 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
             when (key) {
                 KEY_SHOW_PREDICTED_APPS -> {
                     showPredictedApps = sharedPrefs.getBoolean(KEY_SHOW_PREDICTED_APPS, true)
+                }
+                SidebarApplication.KEY_SIDEBAR_WIDTH_DP -> {
+                    _sidebarWidthDp.value = sharedPrefs.getInt(
+                        SidebarApplication.KEY_SIDEBAR_WIDTH_DP,
+                        SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP
+                    )
+                }
+                SidebarApplication.KEY_FREEFORM_WINDOW_STYLE -> {
+                    _windowStyle.value = sharedPrefs.getString(
+                        SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
+                        SidebarApplication.STYLE_STOCK
+                    ) ?: SidebarApplication.STYLE_STOCK
                 }
             }
         }
@@ -209,12 +267,14 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
 
     init {
         logger.d("init")
+        loadAllInstalledApps()
     }
 
     fun registerCallbacks() {
         if (callbacksRegistered) return
         logger.d("registerCallbacks")
         initSidebarAppList()
+        loadAllInstalledApps()
         launcherApps.registerCallback(launcherAppsCallback)
         if (showPredictedApps) registerAppPredictionCallback()
         sharedPrefs.registerOnSharedPreferenceChangeListener(sharedPrefsListener)
@@ -307,7 +367,60 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
                 .collect { sidebarAppList ->
                     logger.d("initSidebarAppList: combinedList=$sidebarAppList")
                     _sidebarAppList.value = sidebarAppList.toList()
+                    updateHyperOSAppList(repository.getAllSidebarWithoutLiveData(), _allInstalledApps.value)
                 }
+        }
+    }
+
+    fun loadAllInstalledApps() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val apps = ArrayList<AppInfo>()
+            runCatching {
+                userManager.getSidebarFilteredUsers().forEach { userInfo ->
+                    val list = launcherApps.getActivityList(null, userInfo.userHandle)
+                    list.forEach { info ->
+                        val component = info.componentName
+                        if (application.isResizeableActivity(component)) {
+                            apps.add(
+                                AppInfo(
+                                    info.label.toString(),
+                                    info.getBadgedIcon(0),
+                                    component.packageName,
+                                    component.className,
+                                    userInfo.userId
+                                )
+                            )
+                        }
+                    }
+                }
+                Collections.sort(apps, appComparator)
+                _allInstalledApps.value = apps.toList()
+                updateHyperOSAppList(repository.getAllSidebarWithoutLiveData(), apps)
+            }.onFailure { e ->
+                logger.e("failed to load all installed apps: ", e)
+            }
+        }
+    }
+
+    private fun updateHyperOSAppList(pinnedEntities: List<SidebarAppsEntity>?, allApps: List<AppInfo>) {
+        val pinnedApps = mutableListOf<AppInfo>()
+        pinnedEntities?.forEach { entity ->
+            if (userManager.isSidebarUserAllowed(entity.userId)) {
+                runCatching {
+                    pinnedApps.add(entity.toAppInfo())
+                }
+            }
+        }
+        val remainingApps = allApps.filter { app ->
+            pinnedApps.none { it.packageName == app.packageName && it.userId == app.userId }
+        }
+        _hyperOSAppList.value = pinnedApps + remainingApps
+    }
+
+    private inner class AppComparator : Comparator<AppInfo> {
+        private val collator = Collator.getInstance(Locale.getDefault())
+        override fun compare(p0: AppInfo, p1: AppInfo): Int {
+            return collator.compare(p0.label, p1.label)
         }
     }
 
