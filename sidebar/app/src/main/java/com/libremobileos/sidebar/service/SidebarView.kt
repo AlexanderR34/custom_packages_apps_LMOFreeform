@@ -170,17 +170,23 @@ class SidebarView(
             SidebarApplication.KEY_FREEFORM_WINDOW_STYLE,
             SidebarApplication.DEFAULT_FREEFORM_WINDOW_STYLE
         )
+        val lengthPercent = sharedPrefs.getInt(
+            SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT,
+            SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT
+        )
         val sidebarHeight = if (currentStyle == SidebarApplication.STYLE_NEW) {
-            if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            val base = if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
                 (screenHeight * 0.46f).roundToInt()
             } else {
                 (screenHeight * 0.82f).roundToInt()
             }
+            (base * (lengthPercent / 100f)).roundToInt()
         } else {
-            val lengthPercent = sharedPrefs.getInt(
-                SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT,
-                SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT
-            )
+            val baseSidebarHeight = if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                screenHeight / 3
+            } else {
+                (screenHeight * 0.8f).roundToInt()
+            }
             (baseSidebarHeight * (lengthPercent / 100f)).roundToInt()
         }
 
@@ -194,10 +200,19 @@ class SidebarView(
         val maxOffsetY = (screenHeight - sidebarHeight) / 2 - 32
         val clampedY = sidebarPositionY.coerceIn(-maxOffsetY, maxOffsetY)
 
+        val offsetX = if (currentStyle == SidebarApplication.STYLE_NEW) {
+            val density = context.resources.displayMetrics.density
+            val dockWidthPx = (60 * density).roundToInt()
+            val edgeMarginPx = (14 * density).roundToInt()
+            dockWidthPx / 2 + edgeMarginPx
+        } else {
+            OFFSET_X
+        }
+
         layoutParams.apply {
             width = LayoutParams.WRAP_CONTENT
             height = sidebarHeight
-            x = sidebarPositionX * (screenWidth / 2 - OFFSET_X)
+            x = sidebarPositionX * (screenWidth / 2 - offsetX)
             y = clampedY
         }
 

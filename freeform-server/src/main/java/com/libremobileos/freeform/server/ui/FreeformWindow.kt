@@ -14,6 +14,7 @@ import android.graphics.Matrix
 import android.view.InputDevice
 import android.view.GestureDetector
 import android.view.IRotationWatcher
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
@@ -52,7 +53,7 @@ class FreeformWindow(
     private lateinit var topBarView: View
     private var bottomBarView: View? = null
     public lateinit var veilView: ViewGroup
-    private var displayId = Display.INVALID_DISPLAY
+    var displayId = Display.INVALID_DISPLAY
     var defaultDisplayWidth = context.resources.displayMetrics.widthPixels
     var defaultDisplayHeight = context.resources.displayMetrics.heightPixels
     var defaultDisplayRotation = context.display.rotation
@@ -64,51 +65,58 @@ class FreeformWindow(
     private var appIcon: Drawable? = null
 
     var isHyperOSStyle = false
+    var isFloatingIcon = false
     private var actionSubmenuView: View? = null
+    private var threeDotsHandle: View? = null
+    private var headerContainer: View? = null
+    private var floatingIconCard: View? = null
+    private var floatingAppIcon: ImageView? = null
     var leftScaleView: View? = null
     var rightScaleView: View? = null
-    private val hideCornersRunnable = Runnable {
+
+    fun resetCornerAutoHideTimer() {
+        if (!isHyperOSStyle || isFloatingIcon) return
         if (!freeformConfig.isHangUp) {
-            leftScaleView?.animate()?.alpha(0f)?.setDuration(250)?.start()
-            rightScaleView?.animate()?.alpha(0f)?.setDuration(250)?.start()
+            leftScaleView?.visibility = View.VISIBLE
+            leftScaleView?.alpha = 1f
+            rightScaleView?.visibility = View.VISIBLE
+            rightScaleView?.alpha = 1f
         }
     }
 
-    fun resetCornerAutoHideTimer() {
-        if (!isHyperOSStyle) return
-        handler.removeCallbacks(hideCornersRunnable)
-        if (!freeformConfig.isHangUp) {
-            leftScaleView?.animate()?.alpha(1f)?.setDuration(150)?.start()
-            rightScaleView?.animate()?.alpha(1f)?.setDuration(150)?.start()
-            handler.postDelayed(hideCornersRunnable, 5000L)
-        }
-    }
+    private val hideSubmenuRunnable = Runnable { hideSubmenuIfOpen() }
 
     fun toggleSubmenu() {
         actionSubmenuView?.let { submenu ->
             resetCornerAutoHideTimer()
             if (submenu.visibility == View.VISIBLE) {
-                submenu.animate().alpha(0f).translationY(-10f).setDuration(150).withEndAction {
-                    submenu.visibility = View.GONE
-                }.start()
+                hideSubmenuIfOpen()
             } else {
+                handler.removeCallbacks(hideSubmenuRunnable)
+                threeDotsHandle?.animate()?.alpha(0f)?.setDuration(120)?.start()
                 submenu.visibility = View.VISIBLE
                 submenu.alpha = 0f
-                submenu.translationY = -10f
-                submenu.animate().alpha(1f).translationY(0f).setDuration(180).start()
+                submenu.scaleX = 0.85f
+                submenu.scaleY = 0.85f
+                submenu.animate()?.alpha(1f)?.scaleX(1f)?.scaleY(1f)?.setDuration(160)?.start()
+                handler.postDelayed(hideSubmenuRunnable, 3500L)
             }
         }
     }
 
     fun hideSubmenuIfOpen() {
+        handler.removeCallbacks(hideSubmenuRunnable)
         actionSubmenuView?.let { submenu ->
             if (submenu.visibility == View.VISIBLE) {
-                submenu.animate().alpha(0f).translationY(-10f).setDuration(150).withEndAction {
+                submenu.animate()?.alpha(0f)?.scaleX(0.85f)?.scaleY(0.85f)?.setDuration(120)?.withEndAction {
                     submenu.visibility = View.GONE
-                }.start()
+                    threeDotsHandle?.animate()?.alpha(1f)?.setDuration(120)?.start()
+                }?.start()
             }
         }
     }
+
+
 
     fun enterSplitScreen(position: Int) {
         val taskId = freeformTaskStackListener?.taskId ?: -1
@@ -117,12 +125,34 @@ class FreeformWindow(
             return
         }
         dlog(TAG, "enterSplitScreen: taskId=$taskId position=$position")
-        runCatching {
-            SystemServiceHolder.activityTaskManager.moveRootTaskToDisplay(taskId, Display.DEFAULT_DISPLAY)
-            Runtime.getRuntime().exec("cmd window shell splitscreen moveToSideStage $taskId $position")
-        }.onFailure { e ->
-            Slog.e(TAG, "failed to enter split screen: ", e)
-        }
+        Thread {
+            runCatching {
+                SystemServiceHolder.activityTaskManager.moveRootTaskToDisplay(taskId, Display.DEFAULT_DISPLAY)
+                val windowBinder = android.os.ServiceManager.getService("window")
+                if (windowBinder != null) {
+                    val pfdIn = android.os.ParcelFileDescriptor.createPipe()
+                    val pfdOut = android.os.ParcelFileDescriptor.createPipe()
+                    val pfdErr = android.os.ParcelFileDescriptor.createPipe()
+                    windowBinder.shellCommand(
+                        pfdIn[0].fileDescriptor,
+                        pfdOut[1].fileDescriptor,
+                        pfdErr[1].fileDescriptor,
+                        arrayOf("shell", "splitscreen", "moveToSideStage", taskId.toString(), position.toString()),
+                        null,
+                        object : android.os.ResultReceiver(null) {}
+                    )
+                    runCatching {
+                        pfdIn[0].close(); pfdIn[1].close()
+                        pfdOut[0].close(); pfdOut[1].close()
+                        pfdErr[0].close(); pfdErr[1].close()
+                    }
+                } else {
+                    Runtime.getRuntime().exec(arrayOf("/system/bin/cmd", "window", "shell", "splitscreen", "moveToSideStage", taskId.toString(), position.toString()))
+                }
+            }.onFailure { e ->
+                Slog.e(TAG, "failed to enter split screen: ", e)
+            }
+        }.start()
         destroy("enterSplitScreen", shouldRemoveTask = false)
     }
 
@@ -285,18 +315,11 @@ class FreeformWindow(
     override fun onTouch(view: View, event: MotionEvent): Boolean {
         if (isHyperOSStyle) {
             resetCornerAutoHideTimer()
+            hideSubmenuIfOpen()
         }
         if (event.action == MotionEvent.ACTION_DOWN) {
             if (displayId > 0) {
                 runCatching { windowManagerInt.moveDisplayToTopIfAllowed(displayId) }
-            }
-            val currentTaskId = freeformTaskStackListener?.taskId ?: -1
-            runCatching {
-                if (currentTaskId != -1) {
-                    SystemServiceHolder.activityTaskManager.setFocusedTask(currentTaskId)
-                } else if (displayId > 0) {
-                    SystemServiceHolder.activityTaskManager.focusTopTask(displayId)
-                }
             }
         }
         val newEvent = MotionEvent.obtain(event)
@@ -335,7 +358,12 @@ class FreeformWindow(
                 // preserving the aspect ratio
                 defaultDisplayHeight * defaultDisplayHeight / defaultDisplayWidth
             }
-            dlog(TAG, "measureSize: isPortrait=$isPortrait width=$width height=$height")
+            val density = context.resources.displayMetrics.density
+            val miniWidthDp = if (isPortrait) 105f else 150f
+            hangUpWidth = (miniWidthDp * density).roundToInt()
+            val windowRatio = height.toFloat() / max(1, width).toFloat()
+            hangUpHeight = (hangUpWidth * windowRatio).roundToInt()
+            dlog(TAG, "measureSize: isPortrait=$isPortrait width=$width height=$height hangUpWidth=$hangUpWidth hangUpHeight=$hangUpHeight")
         }
     }
 
@@ -376,6 +404,8 @@ class FreeformWindow(
         rightScaleView = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "rightScaleView")
 
         if (isHyperOSStyle) {
+            headerContainer = resourceHolder.getLayoutChildViewByTag(freeformLayout, "headerContainer")
+            threeDotsHandle = resourceHolder.getLayoutChildViewByTag(freeformLayout, "threeDotsHandle")
             actionSubmenuView = resourceHolder.getLayoutChildViewByTag(freeformLayout, "actionSubmenuView")
             val btnFullscreen = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "btnFullscreen")
             val btnSplitTop = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "btnSplitTop")
@@ -383,19 +413,41 @@ class FreeformWindow(
             val btnMiniWindow = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "btnMiniWindow")
             val btnClose = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "btnClose")
 
-            btnFullscreen?.setOnClickListener { MaximizeClickListener(this).onClick(it) }
-            btnSplitTop?.setOnClickListener { enterSplitScreen(0) }
-            btnSplitBottom?.setOnClickListener { enterSplitScreen(1) }
-            btnMiniWindow?.setOnClickListener { handleHangUp() }
-            btnClose?.setOnClickListener { close() }
+            btnFullscreen?.setOnClickListener {
+                hideSubmenuIfOpen()
+                MaximizeClickListener(this).onClick(it)
+            }
+            btnSplitTop?.setOnClickListener {
+                hideSubmenuIfOpen()
+                enterSplitScreen(0)
+            }
+            btnSplitBottom?.setOnClickListener {
+                hideSubmenuIfOpen()
+                enterSplitScreen(1)
+            }
+            btnMiniWindow?.setOnClickListener {
+                hideSubmenuIfOpen()
+                handleHangUp()
+            }
+            btnClose?.setOnClickListener {
+                hideSubmenuIfOpen()
+                close()
+            }
+
+            floatingIconCard = resourceHolder.getLayoutChildViewByTag(freeformLayout, "floatingIconCard")
+            floatingAppIcon = resourceHolder.getLayoutChildViewByTag(freeformLayout, "floatingAppIcon")
+            floatingAppIcon?.setImageDrawable(appIcon)
+            floatingIconCard?.setOnTouchListener(FloatingIconTouchListener(this))
 
             val moveTouchListener = MoveTouchListener(this)
             topBarView.setOnTouchListener(moveTouchListener)
 
+            leftScaleView?.visibility = View.VISIBLE
+            leftScaleView?.alpha = 1f
+            rightScaleView?.visibility = View.VISIBLE
+            rightScaleView?.alpha = 1f
             leftScaleView?.setOnTouchListener(ScaleTouchListener(this, false))
             rightScaleView?.setOnTouchListener(ScaleTouchListener(this, true))
-
-            resetCornerAutoHideTimer()
         } else {
             bottomBarView = resourceHolder.getLayoutChildViewByTag(freeformLayout, "bottomBarView") ?: return false
             val appIconView = resourceHolder.getLayoutChildViewByTag<ImageView>(freeformLayout, "appIcon")
@@ -502,20 +554,24 @@ class FreeformWindow(
                 height = freeformConfig.height
             }
             windowManager.updateViewLayout(freeformLayout, windowParams)
+            headerContainer?.visibility = View.VISIBLE
             topBarView.visibility = View.VISIBLE
             bottomBarView?.visibility = View.VISIBLE
             freeformConfig.isHangUp = false
             freeformView.setOnTouchListener(this)
             if (isHyperOSStyle) {
+                setCardRadius(24f)
                 leftScaleView?.visibility = View.VISIBLE
                 rightScaleView?.visibility = View.VISIBLE
-                resetCornerAutoHideTimer()
+                leftScaleView?.alpha = 1f
+                rightScaleView?.alpha = 1f
             }
         } else {
             hideSubmenuIfOpen()
             freeformConfig.notInHangUpX = windowParams.x
             freeformConfig.notInHangUpY = windowParams.y
             toHangUp()
+            headerContainer?.visibility = View.GONE
             topBarView.visibility = View.GONE
             bottomBarView?.visibility = View.GONE
             freeformConfig.isHangUp = true
@@ -534,19 +590,22 @@ class FreeformWindow(
     fun toHangUp() {
         if (isHyperOSStyle) {
             val density = context.resources.displayMetrics.density
-            val margin = (12 * density).roundToInt()
+            val cardPadding = (6 * density).roundToInt()
+            val totalWindowHalfWidth = (freeformConfig.hangUpWidth / 2) + cardPadding
             val snapRight = windowParams.x >= 0
             val targetX = if (snapRight) {
-                (defaultDisplayWidth / 2 - freeformConfig.hangUpWidth / 2 - margin)
+                (defaultDisplayWidth / 2 - totalWindowHalfWidth)
             } else {
-                -(defaultDisplayWidth / 2 - freeformConfig.hangUpWidth / 2 - margin)
+                -(defaultDisplayWidth / 2 - totalWindowHalfWidth)
             }
-            val maxY = max(0, (defaultDisplayHeight / 2 - freeformConfig.hangUpHeight / 2 - margin))
+            val topMargin = (48 * density).roundToInt()
+            val targetY = -(defaultDisplayHeight / 2 - freeformConfig.hangUpHeight / 2 - topMargin)
             windowParams.apply {
                 x = targetX
-                y = y.coerceIn(-maxY, maxY)
+                y = targetY
                 flags = flags xor WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
             }
+            setCardRadius(18f)
             updateMiniWindowCorners(snapRight)
         } else {
             windowParams.apply {
@@ -563,8 +622,7 @@ class FreeformWindow(
     }
 
     fun updateMiniWindowCorners(snapRight: Boolean) {
-        if (!isHyperOSStyle) return
-        handler.removeCallbacks(hideCornersRunnable)
+        if (!isHyperOSStyle || isFloatingIcon) return
         if (snapRight) {
             leftScaleView?.visibility = View.VISIBLE
             leftScaleView?.alpha = 1f
@@ -577,16 +635,20 @@ class FreeformWindow(
     }
 
     fun snapMiniWindowToLateralEdge() {
+        if (isFloatingIcon) return
         val density = context.resources.displayMetrics.density
-        val margin = (12 * density).roundToInt()
+        val cardPadding = (6 * density).roundToInt()
+        val totalWindowHalfWidth = (freeformConfig.hangUpWidth / 2) + cardPadding
         val snapRight = windowParams.x >= 0
         val targetX = if (snapRight) {
-            (defaultDisplayWidth / 2 - freeformConfig.hangUpWidth / 2 - margin)
+            (defaultDisplayWidth / 2 - totalWindowHalfWidth)
         } else {
-            -(defaultDisplayWidth / 2 - freeformConfig.hangUpWidth / 2 - margin)
+            -(defaultDisplayWidth / 2 - totalWindowHalfWidth)
         }
-        val maxY = max(0, (defaultDisplayHeight / 2 - freeformConfig.hangUpHeight / 2 - margin))
-        val targetY = windowParams.y.coerceIn(-maxY, maxY)
+        val topMargin = (48 * density).roundToInt()
+        val maxY = defaultDisplayHeight / 2 - freeformConfig.hangUpHeight / 2 - (16 * density).roundToInt()
+        val minY = -(defaultDisplayHeight / 2 - freeformConfig.hangUpHeight / 2 - topMargin)
+        val targetY = windowParams.y.coerceIn(minY, maxY)
 
         FreeformAnimation.moveInScreenAnimator(windowParams.x, targetX, 250, true, this)
         if (windowParams.y != targetY) {
@@ -595,10 +657,96 @@ class FreeformWindow(
         updateMiniWindowCorners(snapRight)
     }
 
+    fun toFloatingIcon() {
+        if (!isHyperOSStyle) return
+        isFloatingIcon = true
+        freeformConfig.isHangUp = true
+        hideSubmenuIfOpen()
+
+        val cardView = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "windowCard")
+        cardView?.visibility = View.GONE
+        leftScaleView?.visibility = View.GONE
+        rightScaleView?.visibility = View.GONE
+        leftScaleView?.isEnabled = false
+        rightScaleView?.isEnabled = false
+
+        floatingIconCard?.visibility = View.VISIBLE
+        floatingAppIcon?.setImageDrawable(appIcon)
+
+        val density = context.resources.displayMetrics.density
+        val iconSize = (56 * density).roundToInt()
+        val iconHalfSize = iconSize / 2
+
+        val maxX = (defaultDisplayWidth / 2 - iconHalfSize)
+        val minX = -maxX
+        val topMargin = (48 * density).roundToInt()
+        val bottomMargin = (36 * density).roundToInt()
+        val minY = -(defaultDisplayHeight / 2 - iconHalfSize - topMargin)
+        val maxY = (defaultDisplayHeight / 2 - iconHalfSize - bottomMargin)
+
+        windowParams.x = windowParams.x.coerceIn(minX, maxX)
+        windowParams.y = windowParams.y.coerceIn(minY, maxY)
+
+        runCatching { windowManager.updateViewLayout(freeformLayout, windowParams) }
+    }
+
+    fun restoreFromFloatingIcon() {
+        if (!isFloatingIcon) return
+        isFloatingIcon = false
+        floatingIconCard?.visibility = View.GONE
+        leftScaleView?.isEnabled = true
+        rightScaleView?.isEnabled = true
+
+        val cardView = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "windowCard")
+        cardView?.visibility = View.VISIBLE
+        setCardRadius(18f)
+
+        freeformConfig.isHangUp = true
+        headerContainer?.visibility = View.GONE
+        topBarView.visibility = View.GONE
+
+        freeformRootView.layoutParams = freeformRootView.layoutParams.apply {
+            width = freeformConfig.hangUpWidth
+            height = freeformConfig.hangUpHeight
+        }
+
+        val gestureDetector = GestureDetector(context, hangUpGestureListener)
+        freeformView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            if (event.action == MotionEvent.ACTION_UP) makeSureFreeformInScreen()
+            true
+        }
+
+        snapMiniWindowToLateralEdge()
+        runCatching { windowManager.updateViewLayout(freeformLayout, windowParams) }
+    }
+
+    fun expandFromMiniMode() {
+        freeformConfig.isHangUp = false
+        headerContainer?.visibility = View.VISIBLE
+        topBarView.visibility = View.VISIBLE
+        freeformView.setOnTouchListener(this)
+        setCardRadius(24f)
+        leftScaleView?.visibility = View.VISIBLE
+        rightScaleView?.visibility = View.VISIBLE
+        leftScaleView?.alpha = 1f
+        rightScaleView?.alpha = 1f
+    }
+
+    fun setCardRadius(radiusDp: Float) {
+        val cardView = resourceHolder.getLayoutChildViewByTag<View>(freeformLayout, "windowCard") ?: return
+        val density = context.resources.displayMetrics.density
+        runCatching {
+            val method = cardView.javaClass.getMethod("setRadius", Float::class.javaPrimitiveType)
+            method.invoke(cardView, radiusDp * density)
+        }
+    }
+
     /**
      * Called in uiHandler
      */
     fun makeSureFreeformInScreen() {
+        if (isFloatingIcon) return
         if (freeformConfig.isHangUp) {
             if (isHyperOSStyle) {
                 snapMiniWindowToLateralEdge()

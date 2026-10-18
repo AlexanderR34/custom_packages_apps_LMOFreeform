@@ -94,9 +94,11 @@ fun SidebarSettingsPage(
                             isChecked = viewModel.getPredictedAppsEnabled(),
                             onCheckedChange = { viewModel.setPredictedAppsEnabled(it) }
                         )
+                        val designTitle = stringResource(R.string.sidebar_design_title)
+                        val designSummary = stringResource(R.string.sidebar_design_summary)
                         Preference(object : PreferenceModel {
-                            override val title = stringResource(R.string.sidebar_design_title)
-                            override val summary = { stringResource(R.string.sidebar_design_summary) }
+                            override val title = designTitle
+                            override val summary = { designSummary }
                             override val onClick = { showDesignSubmenu.value = true }
                         })
                         SidebarAppList(viewModel)
@@ -113,17 +115,23 @@ fun SidebarDesignSettingsPage(
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
+    val sidelineLengthValue = rememberSaveable { mutableStateOf(viewModel.getSidelineLengthPercent().toFloat()) }
+    val sidelineWidthValue = rememberSaveable { mutableStateOf(viewModel.getSidelineWidthPercent().toFloat()) }
     val lengthValue = rememberSaveable { mutableStateOf(viewModel.getSidebarLengthPercent().toFloat()) }
     val widthValue = rememberSaveable { mutableStateOf(viewModel.getSidebarWidthDp().toFloat()) }
     val drawerHeightValue = rememberSaveable { mutableStateOf(viewModel.getAllAppsHeightPercent().toFloat()) }
     val windowStyleValue = rememberSaveable { mutableStateOf(viewModel.getFreeformWindowStyle()) }
 
+    val defaultSidelineLength = SidebarApplication.DEFAULT_SIDELINE_LENGTH_PERCENT.toFloat()
+    val defaultSidelineWidth = SidebarApplication.DEFAULT_SIDELINE_WIDTH_PERCENT.toFloat()
     val defaultLength = SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT.toFloat()
     val defaultWidth = SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP.toFloat()
     val defaultDrawerHeight = SidebarApplication.DEFAULT_ALL_APPS_HEIGHT_PERCENT.toFloat()
     val defaultWindowStyle = SidebarApplication.STYLE_STOCK
 
-    val isAnyModified = lengthValue.value.roundToInt() != defaultLength.roundToInt() ||
+    val isAnyModified = sidelineLengthValue.value.roundToInt() != defaultSidelineLength.roundToInt() ||
+            sidelineWidthValue.value.roundToInt() != defaultSidelineWidth.roundToInt() ||
+            lengthValue.value.roundToInt() != defaultLength.roundToInt() ||
             widthValue.value.roundToInt() != defaultWidth.roundToInt() ||
             drawerHeightValue.value.roundToInt() != defaultDrawerHeight.roundToInt() ||
             windowStyleValue.value != defaultWindowStyle
@@ -136,6 +144,7 @@ fun SidebarDesignSettingsPage(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 12.dp)
+        ) {
             val isStockActive = windowStyleValue.value == SidebarApplication.STYLE_STOCK
 
             SidebarWindowDesignSelectorItem(
@@ -150,24 +159,41 @@ fun SidebarDesignSettingsPage(
                 }
             )
 
-            if (!isStockActive) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.sidebar_sliders_stock_only_notice),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(14.dp)
-                    )
+            SidebarDesignSliderItem(
+                title = stringResource(R.string.sideline_length_title),
+                summary = stringResource(R.string.sideline_length_summary),
+                value = sidelineLengthValue.value,
+                defaultValue = defaultSidelineLength,
+                valueRange = 50f..150f,
+                unitSuffix = "%",
+                enabled = true,
+                onValueChange = {
+                    sidelineLengthValue.value = it
+                    viewModel.setSidelineLengthPercent(it.roundToInt())
+                },
+                onReset = {
+                    sidelineLengthValue.value = defaultSidelineLength
+                    viewModel.setSidelineLengthPercent(defaultSidelineLength.roundToInt())
                 }
-            }
+            )
+
+            SidebarDesignSliderItem(
+                title = stringResource(R.string.sideline_width_title),
+                summary = stringResource(R.string.sideline_width_summary),
+                value = sidelineWidthValue.value,
+                defaultValue = defaultSidelineWidth,
+                valueRange = 50f..200f,
+                unitSuffix = "%",
+                enabled = true,
+                onValueChange = {
+                    sidelineWidthValue.value = it
+                    viewModel.setSidelineWidthPercent(it.roundToInt())
+                },
+                onReset = {
+                    sidelineWidthValue.value = defaultSidelineWidth
+                    viewModel.setSidelineWidthPercent(defaultSidelineWidth.roundToInt())
+                }
+            )
 
             SidebarDesignSliderItem(
                 title = stringResource(R.string.sidebar_length_title),
@@ -176,7 +202,7 @@ fun SidebarDesignSettingsPage(
                 defaultValue = defaultLength,
                 valueRange = 50f..150f,
                 unitSuffix = "%",
-                enabled = isStockActive,
+                enabled = true,
                 onValueChange = {
                     lengthValue.value = it
                     viewModel.setSidebarLengthPercent(it.roundToInt())
@@ -194,7 +220,7 @@ fun SidebarDesignSettingsPage(
                 defaultValue = defaultWidth,
                 valueRange = 38f..72f,
                 unitSuffix = " dp",
-                enabled = isStockActive,
+                enabled = true,
                 onValueChange = {
                     widthValue.value = it
                     viewModel.setSidebarWidthDp(it.roundToInt())
@@ -212,7 +238,7 @@ fun SidebarDesignSettingsPage(
                 defaultValue = defaultDrawerHeight,
                 valueRange = 40f..100f,
                 unitSuffix = "%",
-                enabled = isStockActive,
+                enabled = true,
                 onValueChange = {
                     drawerHeightValue.value = it
                     viewModel.setAllAppsHeightPercent(it.roundToInt())
@@ -227,6 +253,8 @@ fun SidebarDesignSettingsPage(
 
             FilledTonalButton(
                 onClick = {
+                    sidelineLengthValue.value = defaultSidelineLength
+                    sidelineWidthValue.value = defaultSidelineWidth
                     lengthValue.value = defaultLength
                     widthValue.value = defaultWidth
                     drawerHeightValue.value = defaultDrawerHeight

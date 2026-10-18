@@ -13,10 +13,12 @@ class GestureListener(private val callback: Callback) : MGestureManager.MGesture
     private val logger = Logger(TAG)
     private var initialTouchX = 0.0f
     private var initialTouchY = 0.0f
-    private var isLongPress = false
+    private var startRawX = 0.0f
+    private var startRawY = 0.0f
+    private var isDragging = false
     private val longPressHandler = Handler(Looper.getMainLooper())
     private val longPressRunnable = Runnable {
-        isLongPress = true
+        isDragging = true
         callback.beginMoveSideline()
     }
 
@@ -31,7 +33,7 @@ class GestureListener(private val callback: Callback) : MGestureManager.MGesture
         velocity: Float
     ): Boolean {
         if (null != gestureEvent) {
-            if (gestureEvent == MGestureManager.GestureEvent.SINGLE_GINGER_LEFT_SLIP || gestureEvent == MGestureManager.GestureEvent.SINGLE_GINGER_RIGHT_SLIP) {
+            if (!isDragging && (gestureEvent == MGestureManager.GestureEvent.SINGLE_GINGER_LEFT_SLIP || gestureEvent == MGestureManager.GestureEvent.SINGLE_GINGER_RIGHT_SLIP)) {
                 callback.showSidebar()
             }
             return true
@@ -45,21 +47,38 @@ class GestureListener(private val callback: Callback) : MGestureManager.MGesture
             MotionEvent.ACTION_DOWN -> {
                 initialTouchX = event.rawX
                 initialTouchY = event.rawY
+                startRawX = event.rawX
+                startRawY = event.rawY
 
-                isLongPress = false
-                longPressHandler.postDelayed(longPressRunnable, 500)
+                isDragging = false
+                longPressHandler.removeCallbacks(longPressRunnable)
+                longPressHandler.postDelayed(longPressRunnable, 350)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (isLongPress) {
-                    callback.moveSideline((event.rawX - initialTouchX).toInt(), (event.rawY - initialTouchY).toInt(), event.rawX.toInt(), event.rawY.toInt())
+                val dx = event.rawX - startRawX
+                val dy = event.rawY - startRawY
+                if (!isDragging && kotlin.math.abs(dy) > 18 && kotlin.math.abs(dy) > kotlin.math.abs(dx)) {
+                    isDragging = true
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    callback.beginMoveSideline()
+                }
+                if (isDragging) {
+                    callback.moveSideline(
+                        (event.rawX - initialTouchX).toInt(),
+                        (event.rawY - initialTouchY).toInt(),
+                        event.rawX.toInt(),
+                        event.rawY.toInt()
+                    )
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 longPressHandler.removeCallbacks(longPressRunnable)
-                isLongPress = false
-                callback.endMoveSideline()
+                if (isDragging) {
+                    isDragging = false
+                    callback.endMoveSideline()
+                }
             }
         }
     }

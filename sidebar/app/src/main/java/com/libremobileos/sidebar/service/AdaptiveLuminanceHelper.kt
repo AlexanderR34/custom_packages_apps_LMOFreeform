@@ -29,11 +29,21 @@ class AdaptiveLuminanceHelper(
 
     private var isDarkRegion = true
     private var lastLuma = -1.0f
+    private var attachedView: View? = null
+    private val layoutChangeListener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+        updateSamplingRect(v)
+    }
 
     companion object {
         private const val TAG = "AdaptiveLuminanceHelper"
-        private const val THRESHOLD_SWITCH_TO_LIGHT = 0.52f
-        private const val THRESHOLD_SWITCH_TO_DARK = 0.48f
+        // Luminance thresholds for adaptive contrast:
+        // A background is considered LIGHT (switch handle to TRANSLUCENT GRAY)
+        // only when luminance is distinctly bright/white (>= 0.65).
+        // Over dark, gray, or medium backgrounds (luminance <= 0.55),
+        // the background is considered DARK/GRAY (switch handle to TRANSLUCENT WHITE)
+        // so that the bar NEVER merges with gray or dark backgrounds.
+        private const val THRESHOLD_SWITCH_TO_LIGHT = 0.65f
+        private const val THRESHOLD_SWITCH_TO_DARK = 0.55f
     }
 
     init {
@@ -66,6 +76,12 @@ class AdaptiveLuminanceHelper(
             }
         }
 
+        if (sampledView != null && attachedView != sampledView) {
+            attachedView?.removeOnLayoutChangeListener(layoutChangeListener)
+            attachedView = sampledView
+            sampledView.addOnLayoutChangeListener(layoutChangeListener)
+        }
+
         runCatching {
             val wm = context.getSystemService(Context.WALLPAPER_SERVICE) as? WallpaperManager
             wm?.addOnColorsChangedListener(wallpaperColorsListener, handler)
@@ -86,15 +102,21 @@ class AdaptiveLuminanceHelper(
 
     fun updateSamplingRect(sampledView: View, stopLayer: SurfaceControl? = null) {
         if (!sampledView.isAttachedToWindow) return
+        val dm = context.resources.displayMetrics
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
+
         val location = IntArray(2)
         sampledView.getLocationOnScreen(location)
-        val left = location[0].coerceAtLeast(0)
-        val top = location[1].coerceAtLeast(0)
-        val right = (location[0] + sampledView.width).coerceAtLeast(left + 1)
-        val bottom = (location[1] + sampledView.height).coerceAtLeast(top + 1)
+        val left = location[0].coerceIn(0, screenW - 2)
+        val top = location[1].coerceIn(0, screenH - 2)
+        val right = (location[0] + sampledView.width).coerceIn(left + 1, screenW)
+        val bottom = (location[1] + sampledView.height).coerceIn(top + 1, screenH)
 
         val newRect = Rect(left, top, right, bottom)
-        val effectiveStopLayer = stopLayer ?: sampledView.viewRootImpl?.surfaceControl
+        val effectiveStopLayer = stopLayer ?: runCatching {
+            sampledView.viewRootImpl?.surfaceControl
+        }.getOrNull()
 
         if (newRect == currentSamplingRect && effectiveStopLayer == sampledStopLayer && isSamplingRegistered) {
             return
@@ -115,12 +137,25 @@ class AdaptiveLuminanceHelper(
                 isSamplingRegistered = false
             }
             val sc = sampledStopLayer
-            CompositionSamplingListener.register(
-                listener,
-                Display.DEFAULT_DISPLAY,
-                if (sc != null && sc.isValid) sc else null,
-                currentSamplingRect
-            )
+            val wrappedSc = if (sc != null && sc.isValid) {
+                runCatching { SurfaceControl(sc, "AdaptiveLuminanceHelper") }.getOrNull() ?: sc
+            } else null
+            try {
+                CompositionSamplingListener.register(
+                    listener,
+                    Display.DEFAULT_DISPLAY,
+                    wrappedSc,
+                    currentSamplingRect
+                )
+            } catch (e: Exception) {
+                logger.w("Failed with stopLayer, retrying without stopLayer: $e")
+                CompositionSamplingListener.register(
+                    listener,
+                    Display.DEFAULT_DISPLAY,
+                    null,
+                    currentSamplingRect
+                )
+            }
             isSamplingRegistered = true
             logger.d("CompositionSamplingListener registered for rect=$currentSamplingRect")
         }.onFailure { e ->
@@ -147,6 +182,8 @@ class AdaptiveLuminanceHelper(
 
     fun stopSampling() {
         logger.d("stopSampling")
+        attachedView?.removeOnLayoutChangeListener(layoutChangeListener)
+        attachedView = null
         if (isSamplingRegistered && samplingListener != null) {
             runCatching {
                 CompositionSamplingListener.unregister(samplingListener)

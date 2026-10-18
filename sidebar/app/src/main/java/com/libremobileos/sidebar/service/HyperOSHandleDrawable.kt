@@ -18,20 +18,23 @@ class HyperOSHandleDrawable(private val context: Context) : Drawable() {
 
     private val density = context.resources.displayMetrics.density
 
-    private val pillWidthPx = 4.5f * density
-    private val pillHeightPx = 62f * density
-    private val pillMarginEdgePx = 2.5f * density
-    private val strokeWidthPx = 0.75f * density
+    private val pillWidthPx = 3.8f * density
+    private val pillHeightPx = 58f * density
+    private val pillMarginEdgePx = 1.2f * density
+    private val strokeWidthPx = 0.8f * density
 
-    private val curvedStrokeWidthPx = 3.4f * density
-    private val curvedOutlineWidthPx = 4.8f * density
-    private val curveSweepXPx = 14f * density
+    private val curvedStrokeWidthPx = 3.8f * density
+    private val curvedOutlineWidthPx = 5.4f * density
 
-    private val colorLightHandle = Color.argb(215, 250, 250, 252)
-    private val strokeLightHandle = Color.argb(45, 0, 0, 0)
+    // State 1: Dark or Gray background (isDarkBackground = true):
+    // Pure frosted glass white handle
+    private val colorLightHandle = Color.argb(235, 255, 255, 255)
+    private val strokeLightHandle = Color.TRANSPARENT
 
-    private val colorDarkHandle = Color.argb(135, 38, 40, 46)
-    private val strokeDarkHandle = Color.argb(55, 255, 255, 255)
+    // State 2: White or Light background (isDarkBackground = false):
+    // Pure frosted graphite gray handle
+    private val colorDarkHandle = Color.argb(225, 48, 52, 60)
+    private val strokeDarkHandle = Color.TRANSPARENT
 
     private var currentFillColor = colorLightHandle
     private var currentStrokeColor = strokeLightHandle
@@ -67,6 +70,22 @@ class HyperOSHandleDrawable(private val context: Context) : Drawable() {
     private val curvedPath = Path()
     private val argbEvaluator = ArgbEvaluator()
     private var animator: ValueAnimator? = null
+
+    var lengthScale: Float = 1.0f
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidateSelf()
+            }
+        }
+
+    var widthScale: Float = 1.0f
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidateSelf()
+            }
+        }
 
     var isDockedOnLeft: Boolean = false
         set(value) {
@@ -151,61 +170,55 @@ class HyperOSHandleDrawable(private val context: Context) : Drawable() {
 
     private fun drawStraightPillHandle(canvas: Canvas, b: Rect) {
         val centerY = b.exactCenterY()
-        val halfHeight = pillHeightPx / 2f
+        val halfHeight = (pillHeightPx * lengthScale) / 2f
         val top = centerY - halfHeight
         val bottom = centerY + halfHeight
 
+        val actualPillWidth = pillWidthPx * widthScale
         val left: Float
         val right: Float
 
-        if (isLandscape) {
-            if (isDockedOnLeft) {
-                left = b.exactCenterX() + pillMarginEdgePx
-                right = left + pillWidthPx
-            } else {
-                right = b.exactCenterX() - pillMarginEdgePx
-                left = right - pillWidthPx
-            }
+        if (isDockedOnLeft) {
+            left = b.exactCenterX() + pillMarginEdgePx
+            right = left + actualPillWidth
         } else {
-            if (isDockedOnLeft) {
-                left = b.left + pillMarginEdgePx
-                right = left + pillWidthPx
-            } else {
-                right = b.right - pillMarginEdgePx
-                left = right - pillWidthPx
-            }
+            right = b.exactCenterX() - pillMarginEdgePx
+            left = right - actualPillWidth
         }
 
         rectF.set(left, top, right, bottom)
-        val cornerRadius = pillWidthPx / 2f
+        val cornerRadius = actualPillWidth / 2f
 
         canvas.drawRoundRect(rectF, cornerRadius, cornerRadius, fillPaint)
-        canvas.drawRoundRect(rectF, cornerRadius, cornerRadius, strokePaint)
     }
 
     private fun drawCurvedCornerHandle(canvas: Canvas, b: Rect) {
-        val centerY = b.exactCenterY()
-        val halfHeight = pillHeightPx / 2f
-        val topY = centerY - halfHeight + 4f * density
-        val bottomY = centerY + halfHeight
-        val curveStartY = topY + pillHeightPx * 0.45f
+        val scaledPillHeight = pillHeightPx * lengthScale
+        val cornerArcSize = 22f * density
+        val actualStrokeWidth = curvedStrokeWidthPx * widthScale
+
+        curvedPaint.strokeWidth = actualStrokeWidth
+
+        // Provide 4dp clearance from b.top so the Paint.Cap.ROUND stroke cap is never clipped
+        val topY = b.top.toFloat() + 4f * density + actualStrokeWidth / 2f
+        val bottomY = topY + scaledPillHeight
+        val curveStartY = topY + cornerArcSize
 
         val startX: Float
         curvedPath.reset()
 
         if (isDockedOnLeft) {
-            startX = b.exactCenterX() + 3.5f * density
+            startX = b.exactCenterX() + pillMarginEdgePx + actualStrokeWidth / 2f
             curvedPath.moveTo(startX, bottomY)
             curvedPath.lineTo(startX, curveStartY)
-            curvedPath.quadTo(startX, topY, startX + curveSweepXPx, topY)
+            curvedPath.quadTo(startX, topY, startX + cornerArcSize, topY)
         } else {
-            startX = b.exactCenterX() - 3.5f * density
+            startX = b.exactCenterX() - pillMarginEdgePx - actualStrokeWidth / 2f
             curvedPath.moveTo(startX, bottomY)
             curvedPath.lineTo(startX, curveStartY)
-            curvedPath.quadTo(startX, topY, startX - curveSweepXPx, topY)
+            curvedPath.quadTo(startX, topY, startX - cornerArcSize, topY)
         }
 
-        canvas.drawPath(curvedPath, curvedOutlinePaint)
         canvas.drawPath(curvedPath, curvedPaint)
     }
 

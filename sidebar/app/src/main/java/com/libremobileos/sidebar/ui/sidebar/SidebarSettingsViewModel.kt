@@ -111,6 +111,24 @@ class SidebarSettingsViewModel(private val application: Application) : AndroidVi
             .putBoolean(KEY_SHOW_PREDICTED_APPS, enabled)
             .apply()
 
+    fun getSidelineLengthPercent(): Int =
+        if (isEnabled) sp.getInt(SidebarApplication.KEY_SIDELINE_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDELINE_LENGTH_PERCENT)
+        else SidebarApplication.DEFAULT_SIDELINE_LENGTH_PERCENT
+
+    fun setSidelineLengthPercent(percent: Int) {
+        if (!isEnabled) return
+        sp.edit().putInt(SidebarApplication.KEY_SIDELINE_LENGTH_PERCENT, percent).apply()
+    }
+
+    fun getSidelineWidthPercent(): Int =
+        if (isEnabled) sp.getInt(SidebarApplication.KEY_SIDELINE_WIDTH_PERCENT, SidebarApplication.DEFAULT_SIDELINE_WIDTH_PERCENT)
+        else SidebarApplication.DEFAULT_SIDELINE_WIDTH_PERCENT
+
+    fun setSidelineWidthPercent(percent: Int) {
+        if (!isEnabled) return
+        sp.edit().putInt(SidebarApplication.KEY_SIDELINE_WIDTH_PERCENT, percent).apply()
+    }
+
     fun getSidebarLengthPercent(): Int =
         if (isEnabled) sp.getInt(SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT)
         else SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT
@@ -167,6 +185,8 @@ class SidebarSettingsViewModel(private val application: Application) : AndroidVi
     fun resetDesignToDefault() {
         if (!isEnabled) return
         sp.edit()
+            .putInt(SidebarApplication.KEY_SIDELINE_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDELINE_LENGTH_PERCENT)
+            .putInt(SidebarApplication.KEY_SIDELINE_WIDTH_PERCENT, SidebarApplication.DEFAULT_SIDELINE_WIDTH_PERCENT)
             .putInt(SidebarApplication.KEY_SIDEBAR_LENGTH_PERCENT, SidebarApplication.DEFAULT_SIDEBAR_LENGTH_PERCENT)
             .putInt(SidebarApplication.KEY_SIDEBAR_WIDTH_DP, SidebarApplication.DEFAULT_SIDEBAR_WIDTH_DP)
             .putInt(SidebarApplication.KEY_ALL_APPS_HEIGHT_PERCENT, SidebarApplication.DEFAULT_ALL_APPS_HEIGHT_PERCENT)

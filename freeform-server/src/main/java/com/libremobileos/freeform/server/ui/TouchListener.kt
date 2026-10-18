@@ -31,14 +31,6 @@ class MoveTouchListener(
                 if (window.displayId > 0) {
                     runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
                 }
-                val currentTaskId = window.freeformTaskStackListener?.taskId ?: -1
-                runCatching {
-                    if (currentTaskId != -1) {
-                        SystemServiceHolder.activityTaskManager.setFocusedTask(currentTaskId)
-                    } else if (window.displayId > 0) {
-                        SystemServiceHolder.activityTaskManager.focusTopTask(window.displayId)
-                    }
-                }
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.rawX - startX
@@ -115,46 +107,100 @@ class RightViewClickListener(private val displayId: Int) : View.OnClickListener 
 class ScaleTouchListener(private val window: FreeformWindow, private val isRight: Boolean = true): View.OnTouchListener {
     private var startX = 0.0f
     private var startY = 0.0f
+    private var initialWidth = 0
+    private var initialHeight = 0
+    private var initialWindowX = 0
+    private var initialWindowY = 0
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
+        if (window.isFloatingIcon) {
+            return false
+        }
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 startX = event.rawX
                 startY = event.rawY
-                window.resetCornerAutoHideTimer()
+                initialWidth = if (window.freeformRootView.layoutParams.width > 0) window.freeformRootView.layoutParams.width else window.freeformConfig.width
+                initialHeight = if (window.freeformRootView.layoutParams.height > 0) window.freeformRootView.layoutParams.height else window.freeformConfig.height
+                initialWindowX = window.windowParams.x
+                initialWindowY = window.windowParams.y
+
                 window.hideSubmenuIfOpen()
+
                 if (window.displayId > 0) {
                     runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
                 }
-                val currentTaskId = window.freeformTaskStackListener?.taskId ?: -1
-                runCatching {
-                    if (currentTaskId != -1) {
-                        SystemServiceHolder.activityTaskManager.setFocusedTask(currentTaskId)
-                    } else if (window.displayId > 0) {
-                        SystemServiceHolder.activityTaskManager.focusTopTask(window.displayId)
-                    }
-                }
-                if (window.freeformConfig.isHangUp) {
+
+                if (window.freeformConfig.isHangUp && !window.isHyperOSStyle) {
                     window.handleHangUp()
                     return true
                 }
-                window.freeformRootView.visibility = View.INVISIBLE
-                window.veilView.visibility = View.VISIBLE
+                // Keep the app view live and visible at all times during resize
+                window.freeformRootView.visibility = View.VISIBLE
+                window.veilView.visibility = View.GONE
             }
             MotionEvent.ACTION_MOVE -> {
-                window.resetCornerAutoHideTimer()
-                window.freeformRootView.layoutParams = window.freeformRootView.layoutParams.apply {
-                    width = max(25, (window.freeformRootView.width + if (isRight) (event.rawX - startX) else (startX - event.rawX)).roundToInt())
-                    height = max(25, (window.freeformRootView.height + event.rawY - startY).roundToInt())
+                val dx = (event.rawX - startX).roundToInt()
+                val dy = (event.rawY - startY).roundToInt()
+
+                if (window.isHyperOSStyle && window.freeformConfig.isHangUp) {
+                    val density = window.context.resources.displayMetrics.density
+                    val contractThreshold = (22 * density).roundToInt()
+                    val expandThreshold = (20 * density).roundToInt()
+
+                    // isRight is true when corner is at bottom-right, false when bottom-left
+                    val contractX = if (isRight) -dx else dx
+                    if (contractX > contractThreshold || -dy > contractThreshold) {
+                        // User contracted the mini window inwards -> Switch to Floating Icon mode!
+                        window.toFloatingIcon()
+                        return true
+                    }
+
+                    val expandX = if (isRight) dx else -dx
+                    if (expandX > expandThreshold || dy > expandThreshold) {
+                        // User expands -> Switch to normal freeform resizing
+                        window.expandFromMiniMode()
+                    } else {
+                        return true
+                    }
                 }
-                startX = event.rawX
-                startY = event.rawY
+
+                val density = window.context.resources.displayMetrics.density
+                val minWidth = (210 * density).roundToInt()
+                val minHeight = (260 * density).roundToInt()
+                val maxWidth = window.defaultDisplayWidth
+                val maxHeight = (window.defaultDisplayHeight * 0.9f).roundToInt()
+
+                val newWidth = if (isRight) {
+                    (initialWidth + dx).coerceIn(minWidth, maxWidth)
+                } else {
+                    (initialWidth - dx).coerceIn(minWidth, maxWidth)
+                }
+                val newHeight = (initialHeight + dy).coerceIn(minHeight, maxHeight)
+
+                window.freeformRootView.layoutParams = window.freeformRootView.layoutParams.apply {
+                    width = newWidth
+                    height = newHeight
+                }
+                window.freeformRootView.requestLayout()
             }
             MotionEvent.ACTION_UP -> {
-                window.resetCornerAutoHideTimer()
+                if (window.isFloatingIcon) {
+                    return true
+                }
                 if (window.freeformView.surfaceTexture != null) {
-                    window.freeformConfig.width = window.freeformRootView.layoutParams.width
-                    window.freeformConfig.height = window.freeformRootView.layoutParams.height
+                    val finalWidth = window.freeformRootView.layoutParams.width
+                    val finalHeight = window.freeformRootView.layoutParams.height
+                    window.freeformConfig.width = finalWidth
+                    window.freeformConfig.height = finalHeight
+
+                    val deltaX = finalWidth - initialWidth
+                    val deltaY = finalHeight - initialHeight
+                    window.windowParams.x = if (isRight) initialWindowX + deltaX / 2 else initialWindowX - deltaX / 2
+                    window.windowParams.y = initialWindowY + deltaY / 2
+                    runCatching { window.windowManager.updateViewLayout(window.freeformLayout, window.windowParams) }
+
                     window.handler.post { window.makeSureFreeformInScreen() }
                     window.measureScale()
                     LMOFreeformServiceHolder.resizeFreeform(
@@ -164,11 +210,8 @@ class ScaleTouchListener(private val window: FreeformWindow, private val isRight
                         window.freeformConfig.densityDpi
                     )
                     window.freeformView.surfaceTexture!!.setDefaultBufferSize(window.freeformConfig.freeformWidth, window.freeformConfig.freeformHeight)
-                    // Delay the unveiling until after the scaling is complete
-                    window.handler.postDelayed({
-                        window.freeformRootView.visibility = View.VISIBLE
-                        window.veilView.visibility = View.GONE
-                    }, 250)
+                    window.freeformRootView.visibility = View.VISIBLE
+                    window.veilView.visibility = View.GONE
                 }
             }
         }
@@ -186,6 +229,12 @@ class HangUpGestureListener(private val window: FreeformWindow) : SimpleOnGestur
     }
 
     override fun onSingleTapUp(e: MotionEvent): Boolean {
+        if (window.isHyperOSStyle) {
+            if (window.displayId > 0) {
+                runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
+            }
+            return true
+        }
         window.handler.post { window.handleHangUp() }
         return true
     }
@@ -234,3 +283,60 @@ class HangUpGestureListener(private val window: FreeformWindow) : SimpleOnGestur
         return !coordinate.isNaN() && coordinate.isFinite()
     }
 }
+
+class FloatingIconTouchListener(private val window: FreeformWindow) : View.OnTouchListener {
+    private var startRawX = 0f
+    private var startRawY = 0f
+    private var initialX = 0
+    private var initialY = 0
+    private var isDragging = false
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouch(v: View, event: MotionEvent): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                startRawX = event.rawX
+                startRawY = event.rawY
+                initialX = window.windowParams.x
+                initialY = window.windowParams.y
+                isDragging = false
+                if (window.displayId > 0) {
+                    runCatching { window.windowManagerInt.moveDisplayToTopIfAllowed(window.displayId) }
+                }
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.rawX - startRawX
+                val dy = event.rawY - startRawY
+                val density = window.context.resources.displayMetrics.density
+                val touchSlop = 16f * density
+                if (!isDragging && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                    isDragging = true
+                }
+                if (isDragging) {
+                    val iconHalfSize = (28 * density).roundToInt()
+                    val maxX = (window.defaultDisplayWidth / 2 - iconHalfSize)
+                    val minX = -maxX
+                    val topMargin = (48 * density).roundToInt()
+                    val bottomMargin = (36 * density).roundToInt()
+                    val minY = -(window.defaultDisplayHeight / 2 - iconHalfSize - topMargin)
+                    val maxY = (window.defaultDisplayHeight / 2 - iconHalfSize - bottomMargin)
+
+                    window.windowParams.x = (initialX + dx.roundToInt()).coerceIn(minX, maxX)
+                    window.windowParams.y = (initialY + dy.roundToInt()).coerceIn(minY, maxY)
+                    runCatching { window.windowManager.updateViewLayout(window.freeformLayout, window.windowParams) }
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!isDragging) {
+                    v.performClick()
+                    window.restoreFromFloatingIcon()
+                }
+                return true
+            }
+        }
+        return false
+    }
+}
+

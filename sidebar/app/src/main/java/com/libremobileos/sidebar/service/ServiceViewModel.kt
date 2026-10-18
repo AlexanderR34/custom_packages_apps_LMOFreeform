@@ -53,6 +53,7 @@ import java.util.Locale
  */
 class ServiceViewModel(private val application: Application): AndroidViewModel(application) {
     private val logger = Logger("ServiceViewModel")
+    private val appContext = application.applicationContext
 
     private val repository = DatabaseRepository(application)
 
@@ -96,7 +97,6 @@ class ServiceViewModel(private val application: Application): AndroidViewModel(a
 
     private val predictedAppList = MutableStateFlow<List<AppInfo>>(emptyList())
 
-    private val appContext = application.applicationContext
     private val launcherApps = application.getSystemService(Context.LAUNCHER_APPS_SERVICE)!! as LauncherApps
     private val appPredictionManager = application.getSystemService(AppPredictionManager::class.java)
     private val userManager = application.getSystemService(UserManager::class.java)!!

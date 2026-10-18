@@ -3,10 +3,16 @@
     android:height="28dp"
     android:viewportWidth="28"
     android:viewportHeight="28">
-    <!-- Bottom-Left L-shaped Curved Corner Handle -->
+    <!-- Bottom-Left Concentric Curved Corner Handle Shadow/Outline -->
     <path
-        android:strokeColor="#C8E6E8EA"
+        android:strokeColor="#80000000"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M 3,4 A 21,21 0 0,0 24,25" />
+    <!-- White Handle Foreground -->
+    <path
+        android:strokeColor="#FFFFFFFF"
         android:strokeWidth="3.2"
-        android:strokeCap="round"
-        android:pathData="M 4,6 L 4,14 A 10,10 0 0,0 14,24 L 22,24" />
+        android:strokeLineCap="round"
+        android:pathData="M 3,4 A 21,21 0 0,0 24,25" />
 </vector>

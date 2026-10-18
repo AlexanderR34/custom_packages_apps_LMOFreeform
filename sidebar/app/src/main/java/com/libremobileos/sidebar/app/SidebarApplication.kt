@@ -11,10 +11,14 @@ class SidebarApplication : Application() {
     companion object {
         const val CONFIG = "config"
 
+        const val KEY_SIDELINE_LENGTH_PERCENT = "sideline_length_percent"
+        const val KEY_SIDELINE_WIDTH_PERCENT = "sideline_width_percent"
         const val KEY_SIDEBAR_LENGTH_PERCENT = "sidebar_length_percent"
         const val KEY_SIDEBAR_WIDTH_DP = "sidebar_width_dp"
         const val KEY_ALL_APPS_HEIGHT_PERCENT = "sidebar_all_apps_height_percent"
 
+        const val DEFAULT_SIDELINE_LENGTH_PERCENT = 100
+        const val DEFAULT_SIDELINE_WIDTH_PERCENT = 100
         const val DEFAULT_SIDEBAR_LENGTH_PERCENT = 100
         const val DEFAULT_SIDEBAR_WIDTH_DP = 50
         const val DEFAULT_ALL_APPS_HEIGHT_PERCENT = 100
