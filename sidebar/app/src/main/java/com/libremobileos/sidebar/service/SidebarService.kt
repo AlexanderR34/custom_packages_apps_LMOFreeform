@@ -58,7 +58,7 @@ class SidebarService : Service(), SharedPreferences.OnSharedPreferenceChangeList
                     UserHandle.USER_CURRENT
                 )
             }.getOrNull()
-            return isGameSessionActive || !secureGame.isNullOrEmpty()
+            return isGameSessionActive && !secureGame.isNullOrEmpty()
         }
     private val isNewStyle: Boolean
         get() {
